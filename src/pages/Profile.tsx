@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Loader } from 'lucide-react'
 import Layout from '../components/Layout'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
+import { Post, Profile } from '../types'
 
 const ProfilePage: React.FC = () => {
   const { profile, user } = useAuthStore()
@@ -12,10 +13,81 @@ const ProfilePage: React.FC = () => {
   const [followingCount, setFollowingCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
+  const [activeTab, setActiveTab] = useState<'posts' | 'saved'>('posts')
+  const [userPosts, setUserPosts] = useState<Post[]>([])
+  const [savedPosts, setSavedPosts] = useState<Post[]>([])
+  const [isTabLoading, setIsTabLoading] = useState(false)
+  const [listModal, setListModal] = useState<'followers' | 'following' | null>(null)
+  const [listItems, setListItems] = useState<Profile[]>([])
   const [editData, setEditData] = useState({
     full_name: profile?.full_name || '',
     bio: profile?.bio || '',
   })
+
+  const loadUserPosts = async () => {
+    if (!user) return
+    setIsTabLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*, user:profiles(id, username, avatar_url)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setUserPosts(data || [])
+    } catch (err) {
+      console.error('Error loading user posts', err)
+    } finally {
+      setIsTabLoading(false)
+    }
+  }
+
+  const loadSavedPosts = async () => {
+    if (!user) return
+    setIsTabLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('saved_posts')
+        .select('post:posts(*, user:profiles(id, username, avatar_url))')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      const posts = (data || [])
+        .map((row: any) => ({ ...row.post, isSaved: true }))
+        .filter(Boolean)
+
+      setSavedPosts(posts)
+    } catch (err) {
+      console.error('Error loading saved posts', err)
+    } finally {
+      setIsTabLoading(false)
+    }
+  }
+
+  const openList = async (type: 'followers' | 'following') => {
+    if (!user) return
+    setListModal(type)
+    try {
+      if (type === 'followers') {
+        const { data } = await supabase
+          .from('follows')
+          .select('follower:profiles(id, username, avatar_url, full_name)')
+          .eq('following_id', user.id)
+        setListItems((data || []).map((row: any) => row.follower).filter(Boolean))
+      } else {
+        const { data } = await supabase
+          .from('follows')
+          .select('following:profiles(id, username, avatar_url, full_name)')
+          .eq('follower_id', user.id)
+        setListItems((data || []).map((row: any) => row.following).filter(Boolean))
+      }
+    } catch (err) {
+      console.error('Error loading list', err)
+    }
+  }
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -51,6 +123,8 @@ const ProfilePage: React.FC = () => {
     }
 
     fetchStats()
+    loadUserPosts()
+    loadSavedPosts()
   }, [user])
 
   const handleSaveProfile = async () => {
@@ -123,14 +197,15 @@ const ProfilePage: React.FC = () => {
             {/* Stats */}
             <div className="grid grid-cols-3 gap-4 pt-6 border-t border-dark-600">
               {[
-                { label: 'Posts', value: postCount },
-                { label: 'Followers', value: followerCount },
-                { label: 'Following', value: followingCount },
+                { label: 'Posts', value: postCount, onClick: () => setActiveTab('posts') },
+                { label: 'Followers', value: followerCount, onClick: () => openList('followers') },
+                { label: 'Following', value: followingCount, onClick: () => openList('following') },
               ].map((stat, index) => (
                 <motion.div
                   key={index}
                   whileHover={{ scale: 1.05 }}
-                  className="text-center p-3 rounded-lg bg-dark-800/50 hover:bg-dark-700 transition-colors"
+                  onClick={stat.onClick}
+                  className="text-center p-3 rounded-lg bg-dark-800/50 hover:bg-dark-700 transition-colors cursor-pointer"
                 >
                   <p className="text-2xl font-bold gradient-text">{stat.value}</p>
                   <p className="text-xs text-dark-400 mt-1">{stat.label}</p>
@@ -139,12 +214,83 @@ const ProfilePage: React.FC = () => {
             </div>
           </div>
 
-          {/* Edit Profile Section */}
-          {isEditing ? (
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setIsEditing(true)}
+            className="w-full py-3 rounded-lg border border-syndrome-primary text-syndrome-primary font-semibold hover:bg-syndrome-primary/10 transition-colors"
+          >
+            Edit Profile
+          </motion.button>
+
+          {/* Tabs */}
+          <div className="glass-effect p-4 rounded-2xl border border-dark-700 space-y-4">
+            <div className="flex items-center gap-2 p-1 rounded-xl bg-dark-800/60 border border-dark-700">
+              {['posts', 'saved'].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => {
+                    setActiveTab(tab as 'posts' | 'saved')
+                    if (tab === 'posts') loadUserPosts()
+                    else loadSavedPosts()
+                  }}
+                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    activeTab === tab
+                      ? 'bg-syndrome-primary text-white shadow-glow'
+                      : 'text-dark-300 hover:text-white'
+                  }`}
+                >
+                  {tab === 'posts' ? 'Posts' : 'Saved'}
+                </button>
+              ))}
+            </div>
+
+            {isTabLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
+                  <Loader className="w-6 h-6 text-syndrome-primary" />
+                </motion.div>
+              </div>
+            ) : activeTab === 'posts' ? (
+              userPosts.length === 0 ? (
+                <p className="text-center text-dark-400 py-8">No posts yet.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {userPosts.map((p) => (
+                    <div key={p.id} className="overflow-hidden rounded-xl border border-dark-700 bg-dark-900">
+                      <img src={p.image_url} alt={p.caption || 'Post'} className="w-full h-full object-cover aspect-square" />
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : savedPosts.length === 0 ? (
+              <p className="text-center text-dark-400 py-8">No saved posts yet.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {savedPosts.map((p) => (
+                  <div key={p.id} className="overflow-hidden rounded-xl border border-dark-700 bg-dark-900">
+                    <img src={p.image_url} alt={p.caption || 'Saved post'} className="w-full h-full object-cover aspect-square" />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </div>
+
+      <AnimatePresence>
+        {isEditing && (
+          <motion.div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="glass-effect p-8 rounded-2xl border border-dark-700 space-y-4"
+              initial={{ scale: 0.95, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 10 }}
+              className="w-full max-w-lg glass-effect border border-dark-700 rounded-2xl p-6 space-y-4"
             >
               <h2 className="text-xl font-bold text-white">Edit Profile</h2>
 
@@ -155,9 +301,7 @@ const ProfilePage: React.FC = () => {
                 <input
                   type="text"
                   value={editData.full_name}
-                  onChange={(e) =>
-                    setEditData({ ...editData, full_name: e.target.value })
-                  }
+                  onChange={(e) => setEditData({ ...editData, full_name: e.target.value })}
                   className="w-full px-4 py-2 rounded-lg bg-dark-800/50 border border-dark-600 focus:border-syndrome-primary focus:outline-none transition-colors text-white"
                 />
               </div>
@@ -168,15 +312,13 @@ const ProfilePage: React.FC = () => {
                 </label>
                 <textarea
                   value={editData.bio}
-                  onChange={(e) =>
-                    setEditData({ ...editData, bio: e.target.value })
-                  }
+                  onChange={(e) => setEditData({ ...editData, bio: e.target.value })}
                   rows={3}
                   className="w-full px-4 py-2 rounded-lg bg-dark-800/50 border border-dark-600 focus:border-syndrome-primary focus:outline-none transition-colors text-white resize-none"
                 />
               </div>
 
-              <div className="flex gap-4 pt-4">
+              <div className="flex gap-4 pt-2">
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
@@ -195,18 +337,59 @@ const ProfilePage: React.FC = () => {
                 </motion.button>
               </div>
             </motion.div>
-          ) : (
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setIsEditing(true)}
-              className="w-full py-3 rounded-lg border border-syndrome-primary text-syndrome-primary font-semibold hover:bg-syndrome-primary/10 transition-colors"
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {listModal && (
+          <motion.div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 10 }}
+              className="w-full max-w-md glass-effect border border-dark-700 rounded-2xl p-4 space-y-3 max-h-[70vh] overflow-y-auto"
             >
-              Edit Profile
-            </motion.button>
-          )}
-        </motion.div>
-      </div>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-white capitalize">{listModal}</h3>
+                <button
+                  onClick={() => setListModal(null)}
+                  className="text-dark-300 hover:text-white"
+                >
+                  Close
+                </button>
+              </div>
+
+              {listItems.length === 0 ? (
+                <p className="text-dark-400 text-sm">No users yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {listItems.map((item) => (
+                    <div key={item.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-dark-800/50">
+                      {item.avatar_url ? (
+                        <img src={item.avatar_url} alt={item.username} className="w-10 h-10 rounded-full object-cover border border-dark-700" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-syndrome-primary to-syndrome-secondary flex items-center justify-center text-white font-semibold">
+                          {item.username[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-white font-semibold">{item.username}</p>
+                        <p className="text-xs text-dark-400">{item.full_name}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Layout>
   )
 }

@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Loader } from 'lucide-react'
-import Layout from './Layout'
-import PostCard from './PostCard'
+import Layout from '../components/Layout'
+import PostCard from '../components/PostCard'
+import StoriesBar from '../components/StoriesBar'
 import { supabase } from '../lib/supabase'
 import { Post } from '../types'
 import { useAuthStore } from '../lib/store'
@@ -25,7 +26,8 @@ const HomePage: React.FC = () => {
         .select(`
           *,
           user:profiles(id, username, avatar_url, bio),
-          likes(user_id)
+          likes(user_id),
+          saved_posts(user_id)
         `)
         .order('created_at', { ascending: false })
         .range(start, start + PAGE_SIZE - 1)
@@ -36,6 +38,7 @@ const HomePage: React.FC = () => {
         ...post,
         likes_count: post.likes.length,
         isLiked: user ? post.likes.some((like: any) => like.user_id === user.id) : false,
+        isSaved: user ? post.saved_posts?.some((save: any) => save.user_id === user.id) : false,
       }))
 
       if (pageNum === 0) {
@@ -88,6 +91,8 @@ const HomePage: React.FC = () => {
   return (
     <Layout>
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+        <StoriesBar />
+
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -128,6 +133,7 @@ const HomePage: React.FC = () => {
                 key={post.id}
                 post={post}
                 onLikeChange={() => fetchPosts(0)}
+                onPostDeleted={() => fetchPosts(0)}
               />
             ))}
           </motion.div>

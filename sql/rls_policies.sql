@@ -306,3 +306,41 @@ WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "users_can_delete_own_presence"
 ON presence FOR DELETE
 USING (auth.uid() = user_id);
+
+-- ============================================================================
+-- STORIES - RLS POLICIES
+-- ============================================================================
+
+-- Policy: Users can view active stories
+CREATE POLICY "stories_are_viewable"
+ON stories FOR SELECT
+USING (expires_at > NOW());
+
+-- Policy: Users can insert their own stories
+CREATE POLICY "users_can_insert_stories"
+ON stories FOR INSERT
+WITH CHECK (auth.uid() = user_id);
+
+-- Policy: Users can delete their own stories
+CREATE POLICY "users_can_delete_own_stories"
+ON stories FOR DELETE
+USING (auth.uid() = user_id);
+
+-- ============================================================================
+-- SAVED POSTS - RLS POLICIES
+-- ============================================================================
+
+-- Policy: Users can view their saved posts
+CREATE POLICY "users_can_view_saved_posts"
+ON saved_posts FOR SELECT
+USING (auth.uid() = user_id);
+
+-- Policy: Users can save posts for themselves
+CREATE POLICY "users_can_insert_saved_posts"
+ON saved_posts FOR INSERT
+WITH CHECK (auth.uid() = user_id);
+
+-- Policy: Users can remove their own saved posts
+CREATE POLICY "users_can_delete_saved_posts"
+ON saved_posts FOR DELETE
+USING (auth.uid() = user_id);

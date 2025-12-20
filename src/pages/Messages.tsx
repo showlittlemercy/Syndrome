@@ -5,7 +5,6 @@ import Layout from '../components/Layout'
 import { supabase } from '../lib/supabase'
 import { Message, Profile } from '../types'
 import { useAuthStore } from '../lib/store'
-import { useChatStore } from '../lib/store'
 
 const MessagesPage: React.FC = () => {
   const [conversations, setConversations] = useState<Profile[]>([])
@@ -14,7 +13,6 @@ const MessagesPage: React.FC = () => {
   const [messageInput, setMessageInput] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const { user } = useAuthStore()
-  const { selectedConversation, setSelectedConversation } = useChatStore()
 
   useEffect(() => {
     const fetchConversations = async () => {
@@ -79,16 +77,29 @@ const MessagesPage: React.FC = () => {
 
     fetchMessages()
 
-    // Subscribe to new messages
-    const subscription = supabase
-      .from(`messages:sender_id=eq.${selectedUser.id},receiver_id=eq.${user.id}`)
-      .on('*', (payload) => {
+    // Subscribe to new messages via realtime
+    const channel = supabase
+      .channel('messages-stream')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `receiver_id=eq.${user.id}`
+      }, (payload) => {
+        setMessages((prev) => [...prev, payload.new as Message])
+      })
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `sender_id=eq.${selectedUser.id}`
+      }, (payload) => {
         setMessages((prev) => [...prev, payload.new as Message])
       })
       .subscribe()
 
     return () => {
-      subscription.unsubscribe()
+      supabase.removeChannel(channel)
     }
   }, [selectedUser, user])
 
@@ -137,7 +148,6 @@ const MessagesPage: React.FC = () => {
                   whileHover={{ scale: 1.02 }}
                   onClick={() => {
                     setSelectedUser(conv)
-                    setSelectedConversation(conv.id)
                   }}
                   className={`w-full p-3 rounded-lg transition-colors text-left ${
                     selectedUser?.id === conv.id

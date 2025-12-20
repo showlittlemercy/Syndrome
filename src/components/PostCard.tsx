@@ -1,20 +1,23 @@
-import React, { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
-import { Heart, MessageCircle, Share2, Loader } from 'lucide-react'
-import { supabase } from '../lib/supabase'
-import { Post, Like, Comment } from '../types'
+import React, { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Heart, MessageCircle, Share2, Loader, Bookmark, MoreVertical, Trash } from 'lucide-react'
+import { supabase, deleteImage } from '../lib/supabase'
+import { Post } from '../types'
 import { useAuthStore } from '../lib/store'
 
 interface PostCardProps {
   post: Post
   onLikeChange?: () => void
   onCommentClick?: () => void
+  onPostDeleted?: () => void
 }
 
-const PostCard: React.FC<PostCardProps> = ({ post, onLikeChange, onCommentClick }) => {
+const PostCard: React.FC<PostCardProps> = ({ post, onLikeChange, onCommentClick, onPostDeleted }) => {
   const [isLiked, setIsLiked] = useState(post.isLiked || false)
+  const [isSaved, setIsSaved] = useState(post.isSaved || false)
   const [likeCount, setLikeCount] = useState(post.likes_count)
   const [isLoading, setIsLoading] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const { user } = useAuthStore()
 
   const handleLike = async () => {
@@ -51,6 +54,64 @@ const PostCard: React.FC<PostCardProps> = ({ post, onLikeChange, onCommentClick 
       console.error('Error toggling like:', error)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!user || isLoading) return
+    setIsLoading(true)
+    try {
+      if (isSaved) {
+        const { error } = await supabase
+          .from('saved_posts')
+          .delete()
+          .eq('post_id', post.id)
+          .eq('user_id', user.id)
+
+        if (error) throw error
+        setIsSaved(false)
+      } else {
+        const { error } = await supabase
+          .from('saved_posts')
+          .insert([{ post_id: post.id, user_id: user.id }])
+
+        if (error) throw error
+        setIsSaved(true)
+      }
+    } catch (error) {
+      console.error('Error toggling save:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const parseStoragePath = (url: string) => {
+    const marker = '/storage/v1/object/public/'
+    const idx = url.indexOf(marker)
+    if (idx === -1) return null
+    const remainder = url.substring(idx + marker.length)
+    const [bucket, ...rest] = remainder.split('/')
+    return { bucket, path: rest.join('/') }
+  }
+
+  const handleDelete = async () => {
+    if (!user || user.id !== post.user_id) return
+    setIsLoading(true)
+    try {
+      const storagePath = parseStoragePath(post.image_url)
+      const { error } = await supabase.from('posts').delete().eq('id', post.id)
+      if (error) throw error
+
+      if (storagePath) {
+        await deleteImage(storagePath.bucket, storagePath.path)
+      }
+
+      onPostDeleted?.()
+    } catch (error) {
+      console.error('Error deleting post:', error)
+    } finally {
+      setIsLoading(false)
+      setMenuOpen(false)
     }
   }
 
@@ -109,7 +170,8 @@ const PostCard: React.FC<PostCardProps> = ({ post, onLikeChange, onCommentClick 
       {/* Post Content */}
       <div className="p-4 space-y-3">
         {/* User Info */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 justify-between">
+          <div className="flex items-center gap-3">
           {post.user?.avatar_url && (
             <img
               src={post.user.avatar_url}
@@ -123,6 +185,36 @@ const PostCard: React.FC<PostCardProps> = ({ post, onLikeChange, onCommentClick 
               {new Date(post.created_at).toLocaleDateString()}
             </p>
           </div>
+          </div>
+
+          {user?.id === post.user_id && (
+            <div className="relative">
+              <button
+                onClick={() => setMenuOpen((prev) => !prev)}
+                className="p-2 rounded-full hover:bg-dark-700 text-dark-300"
+              >
+                <MoreVertical className="w-5 h-5" />
+              </button>
+
+              <AnimatePresence>
+                {menuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                    className="absolute right-0 mt-2 w-40 rounded-xl bg-dark-800 border border-dark-600 shadow-xl z-20"
+                  >
+                    <button
+                      onClick={handleDelete}
+                      className="w-full px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2"
+                    >
+                      <Trash className="w-4 h-4" /> Delete
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
         </div>
 
         {/* Caption */}
@@ -169,6 +261,20 @@ const PostCard: React.FC<PostCardProps> = ({ post, onLikeChange, onCommentClick 
             className="flex items-center gap-2 text-dark-400 hover:text-syndrome-primary transition-colors"
           >
             <Share2 className="w-5 h-5" />
+          </motion.button>
+
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleSave}
+            disabled={isLoading}
+            className="flex items-center gap-2 text-dark-400 hover:text-syndrome-primary transition-colors ml-auto"
+          >
+            <Bookmark
+              className="w-5 h-5"
+              fill={isSaved ? '#667eea' : 'none'}
+              color={isSaved ? '#667eea' : 'currentColor'}
+            />
           </motion.button>
         </div>
       </div>

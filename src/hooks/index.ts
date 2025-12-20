@@ -54,9 +54,14 @@ export const usePresence = (userId: string) => {
     if (!userId) return
 
     // Subscribe to presence changes
-    const subscription = supabase
-      .from(`presence:user_id=eq.${userId}`)
-      .on('*', (payload) => {
+    const channel = supabase
+      .channel('presence-stream')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'presence',
+        filter: `user_id=eq.${userId}`
+      }, (payload) => {
         const status = (payload.new as any)?.status || 'offline'
         setIsOnline(status === 'online')
         setLastSeen((payload.new as any)?.last_seen_at)
@@ -64,7 +69,7 @@ export const usePresence = (userId: string) => {
       .subscribe()
 
     return () => {
-      subscription.unsubscribe()
+      supabase.removeChannel(channel)
     }
   }, [userId])
 

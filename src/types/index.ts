@@ -22,6 +22,7 @@ export interface Post {
   updated_at: string;
   user?: Profile;
   isLiked?: boolean;
+  isSaved?: boolean;
 }
 
 export interface Like {
@@ -92,6 +93,25 @@ export interface Presence {
   status: 'online' | 'offline' | 'away';
   last_seen_at: string;
   created_at: string;
+}
+
+// Stories
+export interface Story {
+  id: string;
+  user_id: string;
+  media_url: string;
+  created_at: string;
+  expires_at: string;
+  user?: Profile;
+}
+
+// Saved posts (bookmarks)
+export interface SavedPost {
+  id: string;
+  user_id: string;
+  post_id: string;
+  created_at: string;
+  post?: Post;
 }
 
 // Auth-related types

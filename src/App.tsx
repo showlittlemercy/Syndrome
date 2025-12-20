@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
 import { useAuthStore } from './lib/store'
 import { supabase } from './lib/supabase'
 import LandingPage from './components/Landing'

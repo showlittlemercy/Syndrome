@@ -199,6 +199,39 @@ export type Database = {
           last_seen_at?: string
         }
       }
+      stories: {
+        Row: {
+          id: string
+          user_id: string
+          media_url: string
+          created_at: string
+          expires_at: string
+        }
+        Insert: {
+          user_id: string
+          media_url: string
+          created_at?: string
+          expires_at?: string
+        }
+        Update: {
+          media_url?: string
+          expires_at?: string
+        }
+      }
+      saved_posts: {
+        Row: {
+          id: string
+          user_id: string
+          post_id: string
+          created_at: string
+        }
+        Insert: {
+          user_id: string
+          post_id: string
+          created_at?: string
+        }
+        Update: {}
+      }
     }
     Views: {}
     Functions: {}

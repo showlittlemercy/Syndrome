@@ -165,6 +165,34 @@ CREATE TABLE IF NOT EXISTS presence (
 CREATE INDEX idx_presence_user_id ON presence(user_id);
 
 -- ============================================================================
+-- 10. STORIES TABLE (24h expiring stories)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS stories (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  media_url TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  expires_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() + INTERVAL '24 hours')
+);
+
+CREATE INDEX idx_stories_user_id ON stories(user_id);
+CREATE INDEX idx_stories_expires_at ON stories(expires_at);
+
+-- ============================================================================
+-- 11. SAVED POSTS TABLE (bookmarks)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS saved_posts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, post_id)
+);
+
+CREATE INDEX idx_saved_posts_user_id ON saved_posts(user_id);
+CREATE INDEX idx_saved_posts_post_id ON saved_posts(post_id);
+
+-- ============================================================================
 -- FUNCTIONS FOR AUTOMATIC UPDATES
 -- ============================================================================
 
@@ -227,3 +255,5 @@ ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE group_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE presence ENABLE ROW LEVEL SECURITY;
+ALTER TABLE stories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE saved_posts ENABLE ROW LEVEL SECURITY;
