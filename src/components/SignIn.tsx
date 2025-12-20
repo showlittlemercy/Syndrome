@@ -183,29 +183,20 @@ const SignInPage: React.FC = () => {
             </div>
 
             {/* Sign In Button */}
-            {/* Social Sign In Buttons */}
             <motion.button
-              type="button"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={handleGoogleLogin}
-              disabled={isOAuthLoading}
-              className="w-full py-3 rounded-lg bg-white text-black font-bold hover:shadow-lg transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3 rounded-lg bg-gradient-to-r from-syndrome-primary to-syndrome-secondary text-white font-bold hover:shadow-glow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {isOAuthLoading ? (
+              {isLoading ? (
                 <>
                   <Loader className="w-5 h-5 animate-spin" />
-                  Redirecting...
+                  Signing In...
                 </>
               ) : (
-                <>
-                  <img
-                    src="https://www.svgrepo.com/show/475656/google-color.svg"
-                    alt="Google"
-                    className="w-5 h-5"
-                  />
-                  Continue with Google
-                </>
+                'Sign In'
               )}
             </motion.button>
           </form>
