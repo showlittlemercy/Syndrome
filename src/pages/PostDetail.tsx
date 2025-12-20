@@ -65,6 +65,26 @@ const PostDetailPage: React.FC = () => {
     fetchPostAndComments()
   }, [postId, user])
 
+  // Realtime: keep post details in sync with DB trigger updates
+  useEffect(() => {
+    if (!postId) return
+    const channel = supabase
+      .channel('post-detail-updates')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'posts', filter: `id=eq.${postId}` },
+        (payload) => {
+          const updated = payload.new as Post
+          setPost((prev) => (prev ? { ...prev, comments_count: updated.comments_count, likes_count: updated.likes_count ?? prev.likes_count } : prev))
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [postId])
+
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user || !postId || !commentInput.trim()) return

@@ -59,6 +59,27 @@ const HomePage: React.FC = () => {
     fetchPosts(0)
   }, [fetchPosts])
 
+  // Realtime: update comments_count in feed when posts are updated by triggers
+  useEffect(() => {
+    const channel = supabase
+      .channel('posts-updates')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'posts' },
+        (payload) => {
+          const updated = payload.new as Post
+          setPosts((prev) =>
+            prev.map((p) => (p.id === updated.id ? { ...p, comments_count: updated.comments_count } : p))
+          )
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
   // Infinite scroll observer
   useEffect(() => {
     const observer = new IntersectionObserver(
