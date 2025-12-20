@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Home, Search, Plus, Bell, User } from 'lucide-react'
+import { Home, Search, Plus, Bell, User, MessageCircle } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
@@ -63,6 +63,7 @@ const BottomNavigation: React.FC = () => {
     { id: 'home', label: 'Home', icon: <Home className="w-6 h-6" />, path: '/home' },
     { id: 'search', label: 'Search', icon: <Search className="w-6 h-6" />, path: '/search' },
     { id: 'create', label: 'Create', icon: <Plus className="w-6 h-6" />, path: '/create' },
+    { id: 'messages', label: 'Messages', icon: <MessageCircle className="w-6 h-6" />, path: '/messages' },
     { id: 'notifications', label: 'Notifications', icon: <Bell className="w-6 h-6" />, path: '/notifications' },
     { id: 'profile', label: 'Profile', icon: <User className="w-6 h-6" />, path: '/profile' },
   ]
