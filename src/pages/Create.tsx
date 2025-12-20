@@ -3,7 +3,6 @@ import { motion } from 'framer-motion'
 import { X, Upload, AlertCircle } from 'lucide-react'
 import Layout from '../components/Layout'
 import { supabase, uploadImage } from '../lib/supabase'
-import { useAuthStore } from '../lib/store'
 import { useNavigate } from 'react-router-dom'
 
 const CreatePage: React.FC = () => {
@@ -13,7 +12,6 @@ const CreatePage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { user } = useAuthStore()
   const navigate = useNavigate()
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -46,38 +44,52 @@ const CreatePage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!user) {
-      setError('You must be logged in to create a post')
-      return
-    }
-
-    if (!image && caption.trim().length === 0) {
-      setError('Write something or add an image')
-      return
-    }
-
     setIsLoading(true)
     setError(null)
 
     try {
+      // Get authenticated user from Supabase session
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+      
+      if (authError || !authUser) {
+        throw new Error('You must be logged in to create a post')
+      }
+
+      if (!image && caption.trim().length === 0) {
+        throw new Error('Write something or add an image')
+      }
+
+      console.log('Creating post for user:', authUser.id)
+
       // Upload image if present
       let imageUrl: string | null = null
       if (image) {
         const timestamp = new Date().getTime()
-        const filename = `${user.id}/${timestamp}-${image.name}`
+        const filename = `${authUser.id}/${timestamp}-${image.name}`
         imageUrl = await uploadImage('posts', filename, image)
+        console.log('Image uploaded:', imageUrl)
       }
 
-      // Create post
-      const { error: postError } = await supabase.from('posts').insert([
-        {
-          user_id: user.id,
-          image_url: imageUrl,
-          caption: caption.trim() || null,
-        },
-      ])
+      // Create post with user_id from authenticated session
+      const postData = {
+        user_id: authUser.id,
+        image_url: imageUrl,
+        caption: caption.trim() || null,
+      }
 
-      if (postError) throw postError
+      console.log('Inserting post:', postData)
+
+      const { data, error: postError } = await supabase
+        .from('posts')
+        .insert([postData])
+        .select()
+
+      if (postError) {
+        console.error('Post creation error:', postError)
+        throw postError
+      }
+
+      console.log('Post created successfully:', data)
 
       // Reset form and navigate
       setImage(null)
@@ -85,6 +97,7 @@ const CreatePage: React.FC = () => {
       setCaption('')
       navigate('/home')
     } catch (err) {
+      console.error('Submit error:', err)
       setError(err instanceof Error ? err.message : 'Failed to create post')
     } finally {
       setIsLoading(false)
