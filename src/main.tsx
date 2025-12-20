@@ -1,3 +1,4 @@
+console.log("Google ID Check:", import.meta.env.VITE_GOOGLE_CLIENT_ID);
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'

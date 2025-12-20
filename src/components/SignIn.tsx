@@ -1,40 +1,40 @@
-import React, { useState } from 'react'
-import { motion } from 'framer-motion'
-import { Mail, Lock, Eye, EyeOff, Loader } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
-import { supabase } from '../lib/supabase'
+import React, { useState } from "react";
+import { motion } from "framer-motion";
+import { Mail, Lock, Eye, EyeOff, Loader } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+import { supabase } from "../lib/supabase";
 
 const SignInPage: React.FC = () => {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isOAuthLoading, setIsOAuthLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isOAuthLoading, setIsOAuthLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const navigate = useNavigate()
-  const { signIn } = useAuth()
+  const navigate = useNavigate();
+  const { signIn } = useAuth();
 
   const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
+    e.preventDefault();
+    setError(null);
 
     if (!email || !password) {
-      setError('Please fill in all fields')
-      return
+      setError("Please fill in all fields");
+      return;
     }
 
     try {
-      setIsLoading(true)
-      await signIn(email, password)
-      navigate('/home')
+      setIsLoading(true);
+      await signIn(email, password);
+      navigate("/home");
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign in failed')
+      setError(err instanceof Error ? err.message : "Sign in failed");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const containerVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -43,37 +43,37 @@ const SignInPage: React.FC = () => {
       y: 0,
       transition: { duration: 0.6 },
     },
-  }
+  };
 
   const handleGoogleLogin = async () => {
-    setError(null)
+    setError(null);
     try {
-      setIsOAuthLoading(true)
-      
+      setIsOAuthLoading(true);
+
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider: "google",
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
           queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
+            access_type: "offline",
+            prompt: "consent",
           },
         },
-      })
+      });
 
-      if (oauthError) throw oauthError
-      
-      // Note: Yahan manually navigate karne ki zaroorat nahi hoti, 
+      if (oauthError) throw oauthError;
+
+      // Note: Yahan manually navigate karne ki zaroorat nahi hoti,
       // Supabase khud page ko reload karke redirect kar dega.
-      
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Google sign-in failed'
-      setError(message)
-      console.error('Error logging in with Google:', message)
+      const message =
+        err instanceof Error ? err.message : "Google sign-in failed";
+      setError(message);
+      console.error("Error logging in with Google:", message);
     } finally {
-      setIsOAuthLoading(false)
+      setIsOAuthLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-syndrome-dark via-dark-900 to-dark-800 flex items-center justify-center px-4">
@@ -81,7 +81,7 @@ const SignInPage: React.FC = () => {
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
           animate={{ rotate: 360 }}
-          transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
+          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
           className="absolute -top-40 -right-40 w-80 h-80 bg-syndrome-secondary opacity-10 rounded-full blur-3xl"
         />
       </div>
@@ -124,10 +124,7 @@ const SignInPage: React.FC = () => {
 
           <form onSubmit={handleSignIn} className="space-y-4">
             {/* Email Input */}
-            <motion.div
-              whileFocus={{ scale: 1.02 }}
-              className="relative"
-            >
+            <motion.div whileFocus={{ scale: 1.02 }} className="relative">
               <label className="block text-sm font-medium text-dark-300 mb-2">
                 Email
               </label>
@@ -144,17 +141,14 @@ const SignInPage: React.FC = () => {
             </motion.div>
 
             {/* Password Input */}
-            <motion.div
-              whileFocus={{ scale: 1.02 }}
-              className="relative"
-            >
+            <motion.div whileFocus={{ scale: 1.02 }} className="relative">
               <label className="block text-sm font-medium text-dark-300 mb-2">
                 Password
               </label>
               <div className="relative">
                 <Lock className="absolute left-4 top-3.5 w-5 h-5 text-syndrome-primary pointer-events-none" />
                 <input
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
@@ -180,26 +174,38 @@ const SignInPage: React.FC = () => {
                 <input type="checkbox" className="rounded" />
                 Remember me
               </label>
-              <a href="/auth/forgot-password" className="text-syndrome-primary hover:text-syndrome-accent transition-colors">
+              <a
+                href="/auth/forgot-password"
+                className="text-syndrome-primary hover:text-syndrome-accent transition-colors"
+              >
                 Forgot password?
               </a>
             </div>
 
             {/* Sign In Button */}
+            {/* Social Sign In Buttons */}
             <motion.button
+              type="button"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-3 rounded-lg bg-gradient-to-r from-syndrome-primary to-syndrome-secondary text-white font-bold hover:shadow-glow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              onClick={handleGoogleLogin}
+              disabled={isOAuthLoading}
+              className="w-full py-3 rounded-lg bg-white text-black font-bold hover:shadow-lg transition-all disabled:opacity-70 flex items-center justify-center gap-2"
             >
-              {isLoading ? (
+              {isOAuthLoading ? (
                 <>
                   <Loader className="w-5 h-5 animate-spin" />
-                  Signing In...
+                  Redirecting...
                 </>
               ) : (
-                'Sign In'
+                <>
+                  <img
+                    src="https://www.svgrepo.com/show/475656/google-color.svg"
+                    alt="Google"
+                    className="w-5 h-5"
+                  />
+                  Continue with Google
+                </>
               )}
             </motion.button>
           </form>
@@ -210,7 +216,9 @@ const SignInPage: React.FC = () => {
               <div className="w-full border-t border-dark-600"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-dark-800 text-dark-400">Or continue with</span>
+              <span className="px-2 bg-dark-800 text-dark-400">
+                Or continue with
+              </span>
             </div>
           </div>
 
@@ -234,15 +242,18 @@ const SignInPage: React.FC = () => {
 
           {/* Sign Up Link */}
           <p className="text-center text-dark-400">
-            Don't have an account?{' '}
-            <a href="/auth/signup" className="text-syndrome-primary hover:text-syndrome-accent transition-colors font-semibold">
+            Don't have an account?{" "}
+            <a
+              href="/auth/signup"
+              className="text-syndrome-primary hover:text-syndrome-accent transition-colors font-semibold"
+            >
               Sign Up
             </a>
           </p>
         </motion.div>
       </motion.div>
     </div>
-  )
-}
+  );
+};
 
-export default SignInPage
+export default SignInPage;
