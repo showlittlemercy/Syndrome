@@ -53,8 +53,11 @@ const NotificationsPage: React.FC = () => {
     fetchNotifications()
 
     // Subscribe to real-time notifications
+    const channelName = `notifications-${user.id}-${Date.now()}`
+    console.log('🔌 Creating Notifications realtime channel:', channelName)
+    
     const channel = supabase
-      .channel('notifications')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -77,9 +80,12 @@ const NotificationsPage: React.FC = () => {
             })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('🔌 Notifications realtime status:', status)
+      })
 
     return () => {
+      console.log('🔌 Cleaning up Notifications channel:', channelName)
       supabase.removeChannel(channel)
     }
   }, [user])

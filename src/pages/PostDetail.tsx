@@ -68,8 +68,12 @@ const PostDetailPage: React.FC = () => {
   // Realtime: keep post details in sync with DB trigger updates
   useEffect(() => {
     if (!postId) return
+    
+    const channelName = `post-detail-${postId}-${Date.now()}`
+    console.log('🔌 Creating PostDetail realtime channel:', channelName)
+    
     const channel = supabase
-      .channel('post-detail-updates')
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'posts', filter: `id=eq.${postId}` },
@@ -78,9 +82,12 @@ const PostDetailPage: React.FC = () => {
           setPost((prev) => (prev ? { ...prev, comments_count: updated.comments_count, likes_count: updated.likes_count ?? prev.likes_count } : prev))
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('🔌 PostDetail realtime status:', status)
+      })
 
     return () => {
+      console.log('🔌 Cleaning up PostDetail channel:', channelName)
       supabase.removeChannel(channel)
     }
   }, [postId])

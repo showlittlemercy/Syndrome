@@ -61,21 +61,28 @@ const HomePage: React.FC = () => {
 
   // Realtime: update comments_count in feed when posts are updated by triggers
   useEffect(() => {
+    // Use unique channel name to avoid conflicts
+    const channelName = `posts-updates-${Date.now()}`
+    console.log('🔌 Creating Home realtime channel:', channelName)
+    
     const channel = supabase
-      .channel('posts-updates')
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'posts' },
         (payload) => {
           const updated = payload.new as Post
           setPosts((prev) =>
-            prev.map((p) => (p.id === updated.id ? { ...p, comments_count: updated.comments_count } : p))
+            prev.map((p) => (p.id === updated.id ? { ...p, comments_count: updated.comments_count, likes_count: updated.likes_count } : p))
           )
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('🔌 Home realtime status:', status)
+      })
 
     return () => {
+      console.log('🔌 Cleaning up Home channel:', channelName)
       supabase.removeChannel(channel)
     }
   }, [])
