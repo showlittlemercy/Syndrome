@@ -22,10 +22,12 @@ const MessagesPage: React.FC = () => {
 
       try {
         // Get all messages for the user (RLS policy handles filtering)
+        // Limit to last 50 to avoid fetching too much
         const { data, error } = await supabase
           .from('messages')
           .select('sender_id, receiver_id')
           .order('created_at', { ascending: false })
+          .limit(100) // Limit results to prevent overload
 
         if (error) {
           console.error('RLS error or query error:', error)
@@ -85,24 +87,48 @@ const MessagesPage: React.FC = () => {
 
     const fetchMessages = async () => {
       try {
-        // Get messages where current user is sender OR receiver
-        // AND the other user is the selected user
-        const { data, error } = await supabase
+        // Fetch messages in this conversation (both directions)
+        // Use two separate queries to avoid .or() complexity issues
+        const { data: sentMessages, error: sentError } = await supabase
           .from('messages')
           .select('*')
-          .or(
-            `and(sender_id.eq.${user.id},receiver_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},receiver_id.eq.${user.id})`
-          )
+          .eq('sender_id', user.id)
+          .eq('receiver_id', selectedUser.id)
           .order('created_at')
 
-        if (error) {
-          console.error('Error in fetchMessages:', error)
-          throw error
+        const { data: receivedMessages, error: receivedError } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('sender_id', selectedUser.id)
+          .eq('receiver_id', user.id)
+          .order('created_at')
+
+        if (sentError || receivedError) {
+          console.error('Error fetching messages:', sentError || receivedError)
+          return
         }
-        
-        setMessages(data || [])
+
+        // Merge and sort messages
+        const allMessages = [...(sentMessages || []), ...(receivedMessages || [])]
+          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+        // Fetch sender profiles for all messages
+        const senderIds = new Set(allMessages.map(m => m.sender_id))
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('*')
+          .in('id', Array.from(senderIds))
+
+        // Attach profiles to messages
+        const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
+        const messagesWithProfiles = allMessages.map(msg => ({
+          ...msg,
+          sender: profileMap.get(msg.sender_id),
+        }))
+
+        setMessages(messagesWithProfiles)
       } catch (error) {
-        console.error('Error fetching messages:', error)
+        console.error('Error in fetchMessages:', error)
       }
     }
 
@@ -114,86 +140,56 @@ const MessagesPage: React.FC = () => {
     
     const channel = supabase
       .channel(channelName)
-      // Listen for ALL new messages in the conversation (both directions)
+      // Listen for messages WHERE current user is receiver
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'messages',
         filter: `receiver_id=eq.${user.id}`
       }, async (payload) => {
-        console.log('📨 Received message (incoming):', payload.new)
         const m = payload.new as Message
-        // Only append if message is from the selected conversation partner
-        if (m.sender_id === selectedUser.id && m.receiver_id === user.id) {
-          console.log('✅ Message matches current conversation, adding to UI')
-          // Fetch sender profile
+        // Only if from selected conversation
+        if (m.sender_id === selectedUser.id) {
+          console.log('📨 Received message from', selectedUser.username)
+          // Fetch sender profile only if we don't have it
           const { data: senderProfile } = await supabase
             .from('profiles')
-            .select('id, username, avatar_url, is_private, full_name, bio, created_at, updated_at')
+            .select('id, username, avatar_url')
             .eq('id', m.sender_id)
             .single()
           
-          const msgWithProfile: Message = { ...m, sender: senderProfile || undefined }
-          // Prevent duplicates
           setMessages((prev) => {
             const exists = prev.some(msg => msg.id === m.id)
-            if (exists) {
-              console.log('⚠️ Duplicate message detected, skipping')
-              return prev
-            }
-            console.log('➕ Adding new message to state')
-            return [...prev, msgWithProfile]
+            if (exists) return prev
+            return [...prev, { ...m, sender: senderProfile || undefined }]
           })
-        } else {
-          console.log('❌ Message not for current conversation, ignoring')
         }
       })
+      // Listen for messages WHERE other user is receiver (messages we sent)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'messages',
         filter: `receiver_id=eq.${selectedUser.id}`
       }, async (payload) => {
-        console.log('📤 Sent message (outgoing):', payload.new)
         const m = payload.new as Message
-        // Only append if message is sent by current user to selected conversation partner
-        if (m.sender_id === user.id && m.receiver_id === selectedUser.id) {
-          console.log('✅ Message sent by me to current conversation, adding to UI')
-          // Fetch sender profile
-          const { data: senderProfile } = await supabase
-            .from('profiles')
-            .select('id, username, avatar_url, is_private, full_name, bio, created_at, updated_at')
-            .eq('id', m.sender_id)
-            .single()
-          
-          const msgWithProfile: Message = { ...m, sender: senderProfile || undefined }
-          // Prevent duplicates
+        // Only if sent by current user
+        if (m.sender_id === user.id) {
+          console.log('📤 Sent message confirmed')
           setMessages((prev) => {
             const exists = prev.some(msg => msg.id === m.id)
-            if (exists) {
-              console.log('⚠️ Duplicate message detected, skipping')
-              return prev
-            }
-            console.log('➕ Adding sent message to state')
-            return [...prev, msgWithProfile]
+            if (exists) return prev
+            return [...prev, m]
           })
-        } else {
-          console.log('❌ Message not from current conversation, ignoring')
         }
       })
       .subscribe((status, err) => {
-        console.log('🔌 Realtime subscription status:', status)
-        if (err) console.error('❌ Realtime error:', err)
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Successfully subscribed to realtime updates!')
-        }
-        if (status === 'CHANNEL_ERROR') {
-          console.error('❌ Channel error - realtime may not be enabled on messages table!')
-        }
+        console.log('🔌 Subscription status:', status)
+        if (err) console.error('❌ Subscription error:', err)
       })
 
     return () => {
-      console.log('🔌 Cleaning up realtime channel:', channelName)
+      console.log('🔌 Cleaning up channel:', channelName)
       supabase.removeChannel(channel)
     }
   }, [selectedUser, user])
