@@ -51,8 +51,8 @@ const CreatePage: React.FC = () => {
       return
     }
 
-    if (!image) {
-      setError('Please select an image')
+    if (!image && caption.trim().length === 0) {
+      setError('Write something or add an image')
       return
     }
 
@@ -60,17 +60,20 @@ const CreatePage: React.FC = () => {
     setError(null)
 
     try {
-      // Upload image
-      const timestamp = new Date().getTime()
-      const filename = `${user.id}/${timestamp}-${image.name}`
-      const imageUrl = await uploadImage('posts', filename, image)
+      // Upload image if present
+      let imageUrl: string | null = null
+      if (image) {
+        const timestamp = new Date().getTime()
+        const filename = `${user.id}/${timestamp}-${image.name}`
+        imageUrl = await uploadImage('posts', filename, image)
+      }
 
       // Create post
       const { error: postError } = await supabase.from('posts').insert([
         {
           user_id: user.id,
           image_url: imageUrl,
-          caption: caption || null,
+          caption: caption.trim() || null,
         },
       ])
 
@@ -179,7 +182,7 @@ const CreatePage: React.FC = () => {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               type="submit"
-              disabled={isLoading || !image}
+              disabled={isLoading || (!image && caption.trim().length === 0)}
               className="w-full py-3 rounded-lg bg-gradient-to-r from-syndrome-primary to-syndrome-secondary text-white font-bold hover:shadow-glow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Posting...' : 'Post'}

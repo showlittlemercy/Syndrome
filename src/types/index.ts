@@ -14,7 +14,7 @@ export interface Profile {
 export interface Post {
   id: string;
   user_id: string;
-  image_url: string;
+  image_url?: string | null;
   caption?: string;
   likes_count: number;
   comments_count: number;

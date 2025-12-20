@@ -9,7 +9,8 @@ import { useAuthStore } from '../lib/store'
 
 const SearchPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('')
-  const [results, setResults] = useState<Profile[]>([])
+  type ProfileLite = Pick<Profile, 'id' | 'username' | 'full_name' | 'avatar_url'>
+  const [results, setResults] = useState<ProfileLite[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [explorePosts, setExplorePosts] = useState<Post[]>([])
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
@@ -19,18 +20,20 @@ const SearchPage: React.FC = () => {
   const handleSearch = async (query: string) => {
     setSearchQuery(query)
 
-    if (query.length < 2) {
+    if (query.trim().length < 2) {
       setResults([])
       return
     }
 
     setIsLoading(true)
     try {
+      const prefix = query.trim()
       const { data, error } = await supabase
         .from('profiles')
-        .select('*')
-        .ilike('username', `%${query}%`)
-        .limit(10)
+        .select('id, username, full_name, avatar_url')
+        .or(`username.ilike.${prefix}%,full_name.ilike.${prefix}%`)
+        .order('username', { ascending: true })
+        .limit(20)
 
       if (error) throw error
       setResults(data || [])
@@ -74,6 +77,16 @@ const SearchPage: React.FC = () => {
     loadExplore()
     loadFollowing()
   }, [])
+
+  // Debounce search input for performance
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (searchQuery) {
+        handleSearch(searchQuery)
+      }
+    }, 250)
+    return () => clearTimeout(t)
+  }, [searchQuery])
 
   const toggleFollow = async (targetId: string) => {
     if (!user || targetId === user.id) return
@@ -119,7 +132,7 @@ const SearchPage: React.FC = () => {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
+              onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search users by username..."
               className="w-full px-6 py-3 rounded-lg bg-dark-800/50 border border-dark-600 focus:border-syndrome-primary focus:outline-none transition-colors text-white placeholder-dark-500"
             />
@@ -224,11 +237,19 @@ const SearchPage: React.FC = () => {
                   whileHover={{ scale: 1.02 }}
                   className="relative overflow-hidden rounded-xl bg-dark-800 border border-dark-700"
                 >
-                  <img
-                    src={post.image_url}
-                    alt={post.caption || 'Post'}
-                    className="w-full h-full object-cover aspect-square"
-                  />
+                  {post.image_url ? (
+                    <img
+                      src={post.image_url || ''}
+                      alt={post.caption || 'Post'}
+                      className="w-full h-full object-cover aspect-square"
+                    />
+                  ) : (
+                    <div className="w-full h-full aspect-square flex items-center justify-center p-4">
+                      <p className="text-sm text-white line-clamp-4 text-center">
+                        {post.caption || 'Text post'}
+                      </p>
+                    </div>
+                  )}
                   <div className="absolute inset-0 bg-black/30 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center text-sm text-white">
                     {post.caption?.slice(0, 60) || 'View post'}
                   </div>

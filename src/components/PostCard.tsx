@@ -85,8 +85,9 @@ const PostCard: React.FC<PostCardProps> = ({ post, onLikeChange, onCommentClick,
     }
   }
 
-  const parseStoragePath = (url: string) => {
+  const parseStoragePath = (url?: string | null) => {
     const marker = '/storage/v1/object/public/'
+    if (!url) return null
     const idx = url.indexOf(marker)
     if (idx === -1) return null
     const remainder = url.substring(idx + marker.length)
@@ -131,41 +132,51 @@ const PostCard: React.FC<PostCardProps> = ({ post, onLikeChange, onCommentClick,
       animate="visible"
       className="glass-effect rounded-2xl overflow-hidden border border-dark-700 hover:border-syndrome-primary transition-colors"
     >
-      {/* Post Image */}
-      <div className="relative w-full aspect-square overflow-hidden bg-dark-800">
-        <motion.img
-          initial={{ scale: 1 }}
-          whileHover={{ scale: 1.05 }}
-          transition={{ duration: 0.3 }}
-          src={post.image_url}
-          alt="Post"
-          className="w-full h-full object-cover cursor-pointer"
-        />
+      {/* Media or Text Banner */}
+      {post.image_url ? (
+        <div className="relative w-full aspect-square overflow-hidden bg-dark-800">
+          <motion.img
+            initial={{ scale: 1 }}
+            whileHover={{ scale: 1.05 }}
+            transition={{ duration: 0.3 }}
+            src={post.image_url}
+            alt="Post"
+            className="w-full h-full object-cover cursor-pointer"
+          />
 
-        {/* Overlay on hover */}
-        <motion.div
-          whileHover={{ opacity: 1 }}
-          initial={{ opacity: 0 }}
-          className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center gap-8"
-        >
-          <motion.button
-            whileHover={{ scale: 1.2 }}
-            whileTap={{ scale: 0.9 }}
-            className="flex flex-col items-center gap-2 text-white"
+          {/* Overlay on hover */}
+          <motion.div
+            whileHover={{ opacity: 1 }}
+            initial={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center gap-8"
           >
-            <Heart className="w-8 h-8" fill="white" />
-            <span className="text-sm font-semibold">{likeCount}</span>
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.2 }}
-            whileTap={{ scale: 0.9 }}
-            className="flex flex-col items-center gap-2 text-white"
-          >
-            <MessageCircle className="w-8 h-8" />
-            <span className="text-sm font-semibold">{post.comments_count}</span>
-          </motion.button>
-        </motion.div>
-      </div>
+            <motion.button
+              whileHover={{ scale: 1.2 }}
+              whileTap={{ scale: 0.9 }}
+              className="flex flex-col items-center gap-2 text-white"
+            >
+              <Heart className="w-8 h-8" fill="white" />
+              <span className="text-sm font-semibold">{likeCount}</span>
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.2 }}
+              whileTap={{ scale: 0.9 }}
+              className="flex flex-col items-center gap-2 text-white"
+            >
+              <MessageCircle className="w-8 h-8" />
+              <span className="text-sm font-semibold">{post.comments_count}</span>
+            </motion.button>
+          </motion.div>
+        </div>
+      ) : (
+        <div className="relative w-full p-6 bg-gradient-to-br from-dark-800 to-dark-900">
+          {post.caption && (
+            <p className="text-lg text-white leading-relaxed">
+              {post.caption}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Post Content */}
       <div className="p-4 space-y-3">

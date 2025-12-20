@@ -258,7 +258,13 @@ const ProfilePage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   {userPosts.map((p) => (
                     <div key={p.id} className="overflow-hidden rounded-xl border border-dark-700 bg-dark-900">
-                      <img src={p.image_url} alt={p.caption || 'Post'} className="w-full h-full object-cover aspect-square" />
+                      {p.image_url ? (
+                        <img src={p.image_url} alt={p.caption || 'Post'} className="w-full h-full object-cover aspect-square" />
+                      ) : (
+                        <div className="w-full aspect-square flex items-center justify-center p-4 bg-gradient-to-br from-dark-800 to-dark-900">
+                          <p className="text-sm text-white line-clamp-4 text-center">{p.caption || 'Text post'}</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -269,7 +275,13 @@ const ProfilePage: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 {savedPosts.map((p) => (
                   <div key={p.id} className="overflow-hidden rounded-xl border border-dark-700 bg-dark-900">
-                    <img src={p.image_url} alt={p.caption || 'Saved post'} className="w-full h-full object-cover aspect-square" />
+                    {p.image_url ? (
+                      <img src={p.image_url} alt={p.caption || 'Saved post'} className="w-full h-full object-cover aspect-square" />
+                    ) : (
+                      <div className="w-full aspect-square flex items-center justify-center p-4 bg-gradient-to-br from-dark-800 to-dark-900">
+                        <p className="text-sm text-white line-clamp-4 text-center">{p.caption || 'Text post'}</p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

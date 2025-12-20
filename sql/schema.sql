@@ -22,8 +22,9 @@ CREATE TABLE IF NOT EXISTS profiles (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create index for faster username lookups
+-- Create index for faster name lookups
 CREATE INDEX idx_profiles_username ON profiles(username);
+CREATE INDEX idx_profiles_full_name ON profiles(full_name);
 
 -- ============================================================================
 -- 2. POSTS TABLE
@@ -31,13 +32,18 @@ CREATE INDEX idx_profiles_username ON profiles(username);
 CREATE TABLE IF NOT EXISTS posts (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  image_url TEXT NOT NULL,
+  image_url TEXT,
   caption TEXT,
   likes_count INT DEFAULT 0,
   comments_count INT DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CHECK (image_url IS NOT NULL OR caption IS NOT NULL)
 );
+
+-- Migration for existing deployments: allow text-only posts
+-- ALTER TABLE posts ALTER COLUMN image_url DROP NOT NULL;
+-- ALTER TABLE posts ADD CONSTRAINT posts_image_or_caption CHECK (image_url IS NOT NULL OR caption IS NOT NULL);
 
 -- Create indexes for faster queries
 CREATE INDEX idx_posts_user_id ON posts(user_id);
