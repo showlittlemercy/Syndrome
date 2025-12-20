@@ -25,13 +25,23 @@ const ProfilePage: React.FC = () => {
   const [listItems, setListItems] = useState<Profile[]>([])
   const [isFollowing, setIsFollowing] = useState(false)
   const [editData, setEditData] = useState({
-    full_name: currentUserProfile?.full_name || '',
-    bio: currentUserProfile?.bio || '',
+    full_name: '',
+    bio: '',
   })
 
   const isOwnProfile = !userId || userId === user?.id
   const profile = isOwnProfile ? currentUserProfile : viewedProfile
   const profileUserId = userId || user?.id
+
+  // Update editData whenever currentUserProfile changes
+  useEffect(() => {
+    if (currentUserProfile && isOwnProfile) {
+      setEditData({
+        full_name: currentUserProfile.full_name || '',
+        bio: currentUserProfile.bio || '',
+      })
+    }
+  }, [currentUserProfile, isOwnProfile])
 
   const loadUserPosts = async () => {
     if (!profileUserId) return
