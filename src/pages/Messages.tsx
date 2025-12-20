@@ -110,6 +110,8 @@ const MessagesPage: React.FC = () => {
 
     // Subscribe to new messages via realtime
     const channelName = `messages-${user.id}-${selectedUser.id}`
+    console.log('📡 Setting up realtime channel:', channelName)
+    
     const channel = supabase
       .channel(channelName)
       // Listen for ALL new messages in the conversation (both directions)
@@ -119,9 +121,11 @@ const MessagesPage: React.FC = () => {
         table: 'messages',
         filter: `receiver_id=eq.${user.id}`
       }, async (payload) => {
+        console.log('📨 Received message (incoming):', payload.new)
         const m = payload.new as Message
         // Only append if message is from the selected conversation partner
         if (m.sender_id === selectedUser.id && m.receiver_id === user.id) {
+          console.log('✅ Message matches current conversation, adding to UI')
           // Fetch sender profile
           const { data: senderProfile } = await supabase
             .from('profiles')
@@ -133,9 +137,15 @@ const MessagesPage: React.FC = () => {
           // Prevent duplicates
           setMessages((prev) => {
             const exists = prev.some(msg => msg.id === m.id)
-            if (exists) return prev
+            if (exists) {
+              console.log('⚠️ Duplicate message detected, skipping')
+              return prev
+            }
+            console.log('➕ Adding new message to state')
             return [...prev, msgWithProfile]
           })
+        } else {
+          console.log('❌ Message not for current conversation, ignoring')
         }
       })
       .on('postgres_changes', {
@@ -144,9 +154,11 @@ const MessagesPage: React.FC = () => {
         table: 'messages',
         filter: `receiver_id=eq.${selectedUser.id}`
       }, async (payload) => {
+        console.log('📤 Sent message (outgoing):', payload.new)
         const m = payload.new as Message
         // Only append if message is sent by current user to selected conversation partner
         if (m.sender_id === user.id && m.receiver_id === selectedUser.id) {
+          console.log('✅ Message sent by me to current conversation, adding to UI')
           // Fetch sender profile
           const { data: senderProfile } = await supabase
             .from('profiles')
@@ -158,17 +170,30 @@ const MessagesPage: React.FC = () => {
           // Prevent duplicates
           setMessages((prev) => {
             const exists = prev.some(msg => msg.id === m.id)
-            if (exists) return prev
+            if (exists) {
+              console.log('⚠️ Duplicate message detected, skipping')
+              return prev
+            }
+            console.log('➕ Adding sent message to state')
             return [...prev, msgWithProfile]
           })
+        } else {
+          console.log('❌ Message not from current conversation, ignoring')
         }
       })
-      .subscribe((status) => {
-        console.log('Realtime subscription status:', status)
+      .subscribe((status, err) => {
+        console.log('🔌 Realtime subscription status:', status)
+        if (err) console.error('❌ Realtime error:', err)
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Successfully subscribed to realtime updates!')
+        }
+        if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Channel error - realtime may not be enabled on messages table!')
+        }
       })
 
     return () => {
-      console.log('Cleaning up realtime channel:', channelName)
+      console.log('🔌 Cleaning up realtime channel:', channelName)
       supabase.removeChannel(channel)
     }
   }, [selectedUser, user])

@@ -52,6 +52,9 @@ CREATE POLICY "users_can_delete_sent_messages"
 ON messages FOR DELETE
 USING (auth.uid() = sender_id);
 
+-- Enable Realtime for messages table (CRITICAL for real-time chat)
+ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+
 -- ============================================================================
 -- PART 2: FIX NOTIFICATIONS TABLE (HANDLES EXISTING TABLE)
 -- ============================================================================
