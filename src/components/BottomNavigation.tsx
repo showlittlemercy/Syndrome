@@ -18,9 +18,13 @@ const BottomNavigation: React.FC = () => {
   const { user } = useAuthStore()
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [unreadMessages, setUnreadMessages] = useState(0)
 
   useEffect(() => {
-    if (!user) return
+    if (!user) {
+      setUnreadCount(0)
+      return
+    }
 
     // Fetch initial unread count
     const fetchUnreadCount = async () => {
@@ -50,6 +54,47 @@ const BottomNavigation: React.FC = () => {
         },
         () => {
           fetchUnreadCount()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user])
+
+  useEffect(() => {
+    if (!user) {
+      setUnreadMessages(0)
+      return
+    }
+
+    const fetchUnreadMessages = async () => {
+      const { count, error } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('receiver_id', user.id)
+        .is('seen_at', null)
+
+      if (!error && count !== null) {
+        setUnreadMessages(count)
+      }
+    }
+
+    fetchUnreadMessages()
+
+    const channel = supabase
+      .channel(`messages-unread-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${user.id}`,
+        },
+        () => {
+          fetchUnreadMessages()
         }
       )
       .subscribe()
@@ -146,6 +191,20 @@ const BottomNavigation: React.FC = () => {
                         >
                           <span className="text-[10px] font-bold text-white">
                             {unreadCount > 9 ? '9+' : unreadCount}
+                          </span>
+                        </motion.div>
+                      </AnimatePresence>
+                    )}
+                    {item.id === 'messages' && unreadMessages > 0 && (
+                      <AnimatePresence>
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          exit={{ scale: 0 }}
+                          className="absolute -top-1 -right-1 min-w-[18px] h-5 px-1 bg-syndrome-primary rounded-full flex items-center justify-center border-2 border-dark-900"
+                        >
+                          <span className="text-[10px] font-bold text-white">
+                            {unreadMessages > 9 ? '9+' : unreadMessages}
                           </span>
                         </motion.div>
                       </AnimatePresence>
