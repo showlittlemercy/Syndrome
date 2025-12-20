@@ -17,6 +17,21 @@ const AuthCallbackPage: React.FC = () => {
         console.log('🔄 Callback: Processing OAuth redirect')
         console.log('Current URL:', window.location.href)
         
+        // Check for errors in URL
+        const urlParams = new URLSearchParams(window.location.search)
+        const error = urlParams.get('error')
+        const errorCode = urlParams.get('error_code')
+        const errorDescription = urlParams.get('error_description')
+        
+        if (error) {
+          console.error('❌ OAuth Error:', { error, errorCode, errorDescription })
+          setStatus(`OAuth Error: ${errorDescription || error}`)
+          setTimeout(() => {
+            navigate('/auth/signin', { replace: true })
+          }, 3000)
+          return
+        }
+        
         // Supabase automatically processes the hash/code on page load
         // We just need to wait a moment for it to process
         await new Promise(resolve => setTimeout(resolve, 500))
@@ -107,15 +122,11 @@ const AuthCallbackPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-syndrome-dark via-dark-900 to-dark-800 flex items-center justify-center">
-      <motion.div
-        animate={{ rotate: 360 }}
-        transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-        className="flex flex-col items-center gap-4"
-      >
-        <Loader className="w-12 h-12 text-syndrome-primary" />
+      <div className="flex flex-col items-center gap-4">
+        <Loader className="w-12 h-12 text-syndrome-primary animate-spin" />
         <p className="text-white text-lg">{status}</p>
         <p className="text-dark-400 text-sm">Check console (F12) for details</p>
-      </motion.div>
+      </div>
     </div>
   )
 }
