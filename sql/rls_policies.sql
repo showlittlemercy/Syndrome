@@ -225,60 +225,48 @@ USING (auth.uid() = owner_id);
 -- GROUP_MEMBERS - RLS POLICIES
 -- ============================================================================
 
--- Policy: Users can view group members of groups they are part of
+-- Policy: Users can view group members if they are in the group
 CREATE POLICY "users_can_view_group_members"
 ON group_members FOR SELECT
 USING (
-  EXISTS (
-    SELECT 1 FROM group_members AS gm
-    WHERE gm.group_id = group_members.group_id
-    AND gm.user_id = auth.uid()
+  group_id IN (
+    SELECT group_id FROM group_members WHERE user_id = auth.uid()
   )
 );
 
--- Policy: Group owners/admins can add members
+-- Policy: Users can add themselves to groups, or group owners can add members
 CREATE POLICY "admins_can_add_members"
 ON group_members FOR INSERT
 WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM group_members
-    WHERE group_id = group_members.group_id
-    AND user_id = auth.uid()
-    AND role IN ('owner', 'admin')
+  auth.uid() = user_id
+  OR
+  group_id IN (
+    SELECT g.id FROM groups g WHERE g.owner_id = auth.uid()
   )
-  OR auth.uid() = user_id
 );
 
--- Policy: Group owners/admins can update member roles
+-- Policy: Group owners can update member roles
 CREATE POLICY "admins_can_update_members"
 ON group_members FOR UPDATE
 USING (
-  EXISTS (
-    SELECT 1 FROM group_members
-    WHERE group_id = group_members.group_id
-    AND user_id = auth.uid()
-    AND role IN ('owner', 'admin')
+  group_id IN (
+    SELECT g.id FROM groups g WHERE g.owner_id = auth.uid()
   )
 )
 WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM group_members
-    WHERE group_id = group_members.group_id
-    AND user_id = auth.uid()
-    AND role IN ('owner', 'admin')
+  group_id IN (
+    SELECT g.id FROM groups g WHERE g.owner_id = auth.uid()
   )
 );
 
--- Policy: Users can leave groups or admins can remove members
+-- Policy: Users can leave groups or owners can remove members
 CREATE POLICY "users_can_leave_groups"
 ON group_members FOR DELETE
 USING (
-  auth.uid() = user_id OR
-  EXISTS (
-    SELECT 1 FROM group_members
-    WHERE group_id = group_members.group_id
-    AND user_id = auth.uid()
-    AND role IN ('owner', 'admin')
+  auth.uid() = user_id
+  OR
+  group_id IN (
+    SELECT g.id FROM groups g WHERE g.owner_id = auth.uid()
   )
 );
 
