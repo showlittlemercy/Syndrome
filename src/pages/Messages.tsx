@@ -21,16 +21,15 @@ const MessagesPage: React.FC = () => {
       if (!user) return
 
       try {
-        // Get unique users from messages
+        // Get messages where user is either sender or receiver
         const { data, error } = await supabase
           .from('messages')
           .select('sender_id, receiver_id')
-          .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
           .order('created_at', { ascending: false })
 
         if (error) throw error
 
-        // Extract unique user IDs
+        // Extract unique user IDs (exclude current user)
         const userIds = new Set<string>()
         data.forEach((msg: any) => {
           if (msg.sender_id !== user.id) userIds.add(msg.sender_id)
@@ -80,14 +79,20 @@ const MessagesPage: React.FC = () => {
       try {
         const { data, error } = await supabase
           .from('messages')
-          .select(`*, sender:profiles(username, avatar_url)`)
-          .or(
-            `and(sender_id.eq.${user.id},receiver_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},receiver_id.eq.${user.id})`
-          )
+          .select('*')
+          .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+          .or(`sender_id.eq.${selectedUser.id},receiver_id.eq.${selectedUser.id}`)
           .order('created_at')
 
         if (error) throw error
-        setMessages(data || [])
+        
+        // Filter to only messages between these two users
+        const filtered = (data || []).filter(
+          (msg: any) =>
+            (msg.sender_id === user.id && msg.receiver_id === selectedUser.id) ||
+            (msg.sender_id === selectedUser.id && msg.receiver_id === user.id)
+        )
+        setMessages(filtered)
       } catch (error) {
         console.error('Error fetching messages:', error)
       }
