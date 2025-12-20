@@ -24,8 +24,9 @@ const AuthCallbackPage: React.FC = () => {
         const errorDescription = urlParams.get('error_description')
         
         if (error) {
-          console.error('❌ OAuth Error:', { error, errorCode, errorDescription })
-          setStatus(`OAuth Error: ${errorDescription || error}`)
+          const fullError = `${error} (${errorCode}): ${errorDescription}`
+          console.error('❌ OAuth Error:', fullError)
+          setStatus(`Error: ${errorDescription || error}`)
           setTimeout(() => {
             navigate('/auth/signin', { replace: true })
           }, 3000)
