@@ -93,38 +93,48 @@ const MessagesPage: React.FC = () => {
 
     fetchMessages()
 
-    // Realtime Listener
+    // Realtime Listener - Listen to BOTH directions with proper filters
     const channel = supabase
-      .channel(`room-${user.id}-${selectedUser.id}`)
+      .channel(`room-${[user.id, selectedUser.id].sort().join('-')}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'messages'
+          table: 'messages',
+          filter: `sender_id=eq.${user.id}`
         },
         (payload) => {
           const newMsg = payload.new as Message
-          
-          // Check if message belongs to this conversation
-          const isRelevant = 
-            (newMsg.sender_id === user.id && newMsg.receiver_id === selectedUser.id) ||
-            (newMsg.sender_id === selectedUser.id && newMsg.receiver_id === user.id);
-
-          if (isRelevant) {
+          if (newMsg.receiver_id === selectedUser.id) {
             setMessages((prev) => {
-              // Prevent duplicates check
-              if (prev.some(m => m.id === newMsg.id)) return prev;
-              
-              return [...prev, { 
-                ...newMsg, 
-                sender: newMsg.sender_id === selectedUser.id ? selectedUser : undefined 
-              }]
+              if (prev.some(m => m.id === newMsg.id)) return prev
+              return [...prev, { ...newMsg, sender: undefined }]
             })
           }
         }
       )
-      .subscribe()
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `sender_id=eq.${selectedUser.id}`
+        },
+        (payload) => {
+          const newMsg = payload.new as Message
+          if (newMsg.receiver_id === user.id) {
+            setMessages((prev) => {
+              if (prev.some(m => m.id === newMsg.id)) return prev
+              return [...prev, { ...newMsg, sender: selectedUser }]
+            })
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log(`[Room ${user.id}-${selectedUser.id}] Realtime:`, status)
+      })
 
     return () => {
       supabase.removeChannel(channel)
