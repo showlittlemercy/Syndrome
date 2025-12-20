@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase'
 import { Message, Profile } from '../types'
 import { useAuthStore } from '../lib/store'
 
-// Fix: Simple Type
+// Type Error Fix (Jugaad)
 type MessageWithSender = Message & { sender?: Profile }
 
 const MessagesPage: React.FC = () => {
@@ -71,10 +71,11 @@ const MessagesPage: React.FC = () => {
     }
   }, [user, searchParams])
 
-  // 2. Fetch Chat & Realtime
+  // 2. Fetch Chat & Realtime (Anti-Freeze Logic)
   useEffect(() => {
     if (!selectedUser || !user) return
 
+    // Load initial messages
     const fetchMessages = async () => {
       try {
         const { data, error } = await supabase
@@ -98,24 +99,30 @@ const MessagesPage: React.FC = () => {
 
     fetchMessages()
 
+    // ⚡ REALTIME SETUP
+    const channelName = `room-${user.id}-${selectedUser.id}`
     const channel = supabase
-      .channel(`chat:${user.id}-${selectedUser.id}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          filter: `receiver_id=eq.${user.id}`,
+          filter: `receiver_id=eq.${user.id}`, // Sirf wo suno jo mere liye hai
         },
         (payload) => {
+          // Double check: Kya ye message usi bande se aaya hai jisse baat ho rahi hai?
           const newMsg = payload.new as Message
           if (newMsg.sender_id === selectedUser.id) {
             setMessages((prev) => [...prev, { ...newMsg, sender: selectedUser }])
           }
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        // Debugging ke liye: Status check karo console mein
+        console.log("Realtime Status:", status)
+      })
 
     return () => {
       supabase.removeChannel(channel)
@@ -134,15 +141,13 @@ const MessagesPage: React.FC = () => {
       ? crypto.randomUUID() 
       : `temp-${Date.now()}`
 
-    // ✅ FORCE FIX: 'as any' use kiya hai. TypeScript ab error nahi dega.
+    // Optimistic Update (Turant dikhao)
     const optimisticMsg: any = {
       id: tempId,
       sender_id: user.id,
       receiver_id: selectedUser.id,
       content: content,
       created_at: new Date().toISOString(),
-      delivered_at: null, 
-      seen_at: null,
       sender: undefined 
     }
 
@@ -157,8 +162,12 @@ const MessagesPage: React.FC = () => {
           content: content
         })
 
-      if (error) throw error
+      if (error) {
+        console.error("Send Error:", error)
+        alert("Message fail ho gaya!")
+      }
       
+      // Conversation list update (Agar naya banda hai)
       setConversations((prev) => {
         if (!prev.some(p => p.id === selectedUser.id)) {
           return [selectedUser, ...prev]
@@ -168,7 +177,6 @@ const MessagesPage: React.FC = () => {
 
     } catch (error) {
       console.error('Failed to send:', error)
-      alert('Message send failed!')
     }
   }
 
@@ -176,7 +184,7 @@ const MessagesPage: React.FC = () => {
     <Layout>
       <div className="max-w-4xl mx-auto h-[calc(100vh-100px)] flex gap-4 p-4">
         
-        {/* Left Side: Users */}
+        {/* Left Side: Users List */}
         <div className={`w-full sm:w-72 glass-effect rounded-2xl border border-dark-700 overflow-hidden flex flex-col ${selectedUser ? 'hidden sm:flex' : 'flex'}`}>
           <div className="p-4 border-b border-dark-700">
             <h2 className="text-xl font-bold text-white">Messages</h2>
@@ -208,9 +216,10 @@ const MessagesPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Side: Chat */}
+        {/* Right Side: Chat Box */}
         {selectedUser ? (
           <div className="flex-1 glass-effect rounded-2xl border border-dark-700 flex flex-col overflow-hidden">
+            {/* Header */}
             <div className="p-4 border-b border-dark-700 bg-dark-800/30 flex items-center gap-3">
               <button onClick={() => setSelectedUser(null)} className="sm:hidden text-dark-400">← Back</button>
               <img src={selectedUser.avatar_url || `https://ui-avatars.com/api/?name=${selectedUser.full_name}`} className="w-10 h-10 rounded-full" alt="" />
@@ -220,6 +229,7 @@ const MessagesPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth">
               {messages.map((msg, i) => {
                 const isMe = msg.sender_id === user?.id
@@ -247,6 +257,7 @@ const MessagesPage: React.FC = () => {
               <div ref={messagesEndRef} />
             </div>
 
+            {/* Input */}
             <form onSubmit={sendMessage} className="p-3 border-t border-dark-700 bg-dark-800/30 flex gap-2">
               <input
                 type="text"
