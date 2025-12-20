@@ -17,21 +17,17 @@ DROP POLICY IF EXISTS "users_can_view_received_messages" ON messages;
 DROP POLICY IF EXISTS "users_can_view_group_messages" ON messages;
 DROP POLICY IF EXISTS "users_can_update_messages" ON messages;
 DROP POLICY IF EXISTS "users_can_delete_own_messages" ON messages;
+DROP POLICY IF EXISTS "users_can_view_their_messages" ON messages;
+DROP POLICY IF EXISTS "users_can_send_messages" ON messages;
+DROP POLICY IF EXISTS "users_can_update_their_messages" ON messages;
+DROP POLICY IF EXISTS "users_can_delete_sent_messages" ON messages;
 
--- Create comprehensive policy for viewing messages (sent OR received OR group)
+-- Create comprehensive policy for viewing messages (sent OR received)
 CREATE POLICY "users_can_view_their_messages"
 ON messages FOR SELECT
 USING (
   auth.uid() = sender_id 
-  OR auth.uid() = receiver_id 
-  OR (
-    group_id IS NOT NULL 
-    AND EXISTS (
-      SELECT 1 FROM group_members 
-      WHERE group_id = messages.group_id 
-      AND user_id = auth.uid()
-    )
-  )
+  OR auth.uid() = receiver_id
 );
 
 -- Policy: Users can send messages
@@ -44,27 +40,11 @@ CREATE POLICY "users_can_update_their_messages"
 ON messages FOR UPDATE
 USING (
   auth.uid() = receiver_id 
-  OR auth.uid() = sender_id 
-  OR (
-    group_id IS NOT NULL 
-    AND EXISTS (
-      SELECT 1 FROM group_members 
-      WHERE group_id = messages.group_id 
-      AND user_id = auth.uid()
-    )
-  )
+  OR auth.uid() = sender_id
 )
 WITH CHECK (
   auth.uid() = receiver_id 
-  OR auth.uid() = sender_id 
-  OR (
-    group_id IS NOT NULL 
-    AND EXISTS (
-      SELECT 1 FROM group_members 
-      WHERE group_id = messages.group_id 
-      AND user_id = auth.uid()
-    )
-  )
+  OR auth.uid() = sender_id
 );
 
 -- Policy: Users can delete their own sent messages
