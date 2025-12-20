@@ -26,7 +26,7 @@ const SignUpPage: React.FC = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/home`,
+          redirectTo: `${window.location.origin}/auth/callback`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
@@ -70,7 +70,8 @@ const SignUpPage: React.FC = () => {
     try {
       setIsLoading(true)
       await signUp(email, password, username)
-      navigate('/auth/verify-email')
+      // Sign up successful - navigate to home
+      navigate('/home', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign up failed')
     } finally {

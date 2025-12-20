@@ -53,9 +53,7 @@ const SignInPage: React.FC = () => {
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          // Ye line sabse important hai - Login ke baad user ko sahi jagah wapis lata hai
-          redirectTo: `${window.location.origin}/home`, 
-          
+          redirectTo: `${window.location.origin}/auth/callback`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',

@@ -16,15 +16,33 @@ const AuthCallbackPage: React.FC = () => {
         if (error) throw error
 
         if (session) {
+          // Check if profile exists, create if needed (for Google OAuth users)
+          const { data: existingProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+
+          if (!existingProfile) {
+            // Create profile for OAuth user
+            const username = session.user.email?.split('@')[0] || 'user'
+            await supabase.from('profiles').insert({
+              id: session.user.id,
+              username,
+              full_name: session.user.user_metadata?.full_name || username,
+              avatar_url: session.user.user_metadata?.avatar_url,
+            })
+          }
+
           // User authenticated successfully
-          navigate('/home')
+          navigate('/home', { replace: true })
         } else {
           // No session, redirect to sign in
-          navigate('/auth/signin')
+          navigate('/auth/signin', { replace: true })
         }
       } catch (error) {
         console.error('Auth callback error:', error)
-        navigate('/auth/signin')
+        navigate('/auth/signin', { replace: true })
       }
     }
 
