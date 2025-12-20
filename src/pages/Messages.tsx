@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Loader, Send, Check, CheckCheck } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
@@ -15,46 +15,48 @@ const MessagesPage: React.FC = () => {
   const [messageInput, setMessageInput] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const { user } = useAuthStore()
+  
+  // Auto-scroll ref
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
+
+  // 1. Fetch Conversations List
   useEffect(() => {
     const fetchConversations = async () => {
       if (!user) return
 
       try {
-        // Get all messages for the user (RLS policy handles filtering)
-        // Limit to last 50 to avoid fetching too much
+        // Simple approach: Get last 50 messages involved in
         const { data, error } = await supabase
           .from('messages')
           .select('sender_id, receiver_id')
+          .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
           .order('created_at', { ascending: false })
-          .limit(100) // Limit results to prevent overload
+          .limit(50)
 
-        if (error) {
-          console.error('RLS error or query error:', error)
-          throw error
-        }
+        if (error) throw error
 
-        // Extract unique conversation partners
+        // Extract unique IDs
         const userIds = new Set<string>()
         data?.forEach((msg: any) => {
-          if (msg.sender_id !== user.id && msg.sender_id) userIds.add(msg.sender_id)
-          if (msg.receiver_id !== user.id && msg.receiver_id) userIds.add(msg.receiver_id)
+          if (msg.sender_id !== user.id) userIds.add(msg.sender_id)
+          if (msg.receiver_id !== user.id) userIds.add(msg.receiver_id)
         })
 
-        // Fetch profiles for conversation partners
         if (userIds.size > 0) {
-          const { data: profiles, error: profileError } = await supabase
+          const { data: profiles } = await supabase
             .from('profiles')
             .select('*')
             .in('id', Array.from(userIds))
-
-          if (profileError) {
-            console.error('Profile fetch error:', profileError)
-            throw profileError
-          }
+          
           setConversations(profiles || [])
-        } else {
-          setConversations([])
         }
       } catch (error) {
         console.error('Error fetching conversations:', error)
@@ -65,341 +67,230 @@ const MessagesPage: React.FC = () => {
 
     fetchConversations()
 
-    // Check if userId query param exists (from profile message button)
+    // Handle URL param selection
     const userIdParam = searchParams.get('userId')
     if (userIdParam && user) {
-      // Fetch that user's profile and auto-select them
       supabase
         .from('profiles')
         .select('*')
         .eq('id', userIdParam)
         .single()
         .then(({ data }) => {
-          if (data) {
-            setSelectedUser(data as Profile)
-          }
+          if (data) setSelectedUser(data as Profile)
         })
     }
   }, [user, searchParams])
 
+  // 2. Fetch Messages & Setup Realtime
   useEffect(() => {
     if (!selectedUser || !user) return
 
     const fetchMessages = async () => {
       try {
-        // Fetch messages in this conversation (both directions)
-        // Use two separate queries to avoid .or() complexity issues
-        const { data: sentMessages, error: sentError } = await supabase
+        const { data, error } = await supabase
           .from('messages')
           .select('*')
-          .eq('sender_id', user.id)
-          .eq('receiver_id', selectedUser.id)
-          .order('created_at')
+          .or(`and(sender_id.eq.${user.id},receiver_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},receiver_id.eq.${user.id})`)
+          .order('created_at', { ascending: true })
 
-        const { data: receivedMessages, error: receivedError } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('sender_id', selectedUser.id)
-          .eq('receiver_id', user.id)
-          .order('created_at')
+        if (error) throw error
 
-        if (sentError || receivedError) {
-          console.error('Error fetching messages:', sentError || receivedError)
-          return
-        }
-
-        // Merge and sort messages
-        const allMessages = [...(sentMessages || []), ...(receivedMessages || [])]
-          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-
-        // Fetch sender profiles for all messages (only if we have sender ids)
-        let profileMap = new Map<string, Profile>()
-        const senderIds = Array.from(new Set(allMessages.map(m => m.sender_id)))
-        if (senderIds.length > 0) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('*')
-            .in('id', senderIds)
-          profileMap = new Map(profiles?.map((p) => [p.id, p]) || [])
-        }
-
-        // Attach profiles to messages
-        const messagesWithProfiles = allMessages.map((msg) => ({
+        // Attach profile objects manually to avoid complex joins
+        const messagesWithProfiles = data.map(msg => ({
           ...msg,
-          sender: profileMap.get(msg.sender_id),
+          sender: msg.sender_id === user.id ? undefined : selectedUser
         }))
 
         setMessages(messagesWithProfiles)
       } catch (error) {
-        console.error('Error in fetchMessages:', error)
+        console.error('Error loading chat:', error)
       }
     }
 
     fetchMessages()
 
-    // Subscribe to new messages via realtime - use IDs only to prevent recreating
-    const channelName = `messages-${user.id}-${selectedUser.id}`
-    console.log('📡 Setting up realtime channel:', channelName)
-    
+    // ⚡ REALTIME SUBSCRIPTION (Simplified)
     const channel = supabase
-      .channel(channelName)
-      // Listen for messages WHERE current user is receiver
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `receiver_id=eq.${user.id}`
-      }, async (payload) => {
-        const m = payload.new as Message
-        // Only if from selected conversation
-        if (m.sender_id === selectedUser.id) {
-          console.log('📨 Received message from', selectedUser.id)
-          // Fetch sender profile only if we don't have it (use current state to avoid stale closure)
-          setMessages((prev) => {
-            const exists = prev.some(msg => msg.id === m.id)
-            if (exists) return prev
-
-            const existingProfile = prev.find((msg) => msg.sender_id === m.sender_id)?.sender
-
-            if (existingProfile) {
-              return [...prev, { ...m, sender: existingProfile }]
-            }
-
-            // No existing profile in state; fetch synchronously inside set
-            return [...prev, { ...m, sender: undefined }]
-          })
-
-          // Kick off profile fetch in background if we didn't have it
-          const existingProfile = messages.find((msg) => msg.sender_id === m.sender_id)?.sender
-          if (!existingProfile) {
-            const { data } = await supabase
-              .from('profiles')
-              .select('id, username, avatar_url, full_name, bio, is_private, created_at, updated_at')
-              .eq('id', m.sender_id)
-              .single()
-
-            if (data) {
-              setMessages((prev) => prev.map((msg) => (
-                msg.id === m.id
-                  ? {
-                      ...msg,
-                      sender: {
-                        ...msg.sender,
-                        ...data,
-                        is_private: (data as any)?.is_private ?? msg.sender?.is_private ?? false,
-                        full_name: (data as any)?.full_name ?? msg.sender?.full_name ?? '',
-                        bio: (data as any)?.bio ?? msg.sender?.bio ?? '',
-                        created_at: (data as any)?.created_at ?? msg.sender?.created_at ?? new Date().toISOString(),
-                        updated_at: (data as any)?.updated_at ?? msg.sender?.updated_at ?? new Date().toISOString(),
-                      },
-                    }
-                  : msg
-              )))
-            }
+      .channel(`chat:${user.id}-${selectedUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${user.id}`, // Listen for incoming
+        },
+        (payload) => {
+          const newMsg = payload.new as Message
+          // Only add if it belongs to THIS open chat
+          if (newMsg.sender_id === selectedUser.id) {
+            setMessages((prev) => [...prev, { ...newMsg, sender: selectedUser }])
           }
         }
-      })
-      // Listen for messages WHERE other user is receiver (messages we sent)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `receiver_id=eq.${selectedUser.id}`
-      }, async (payload) => {
-        const m = payload.new as Message
-        // Only if sent by current user
-        if (m.sender_id === user.id) {
-          console.log('📤 Sent message confirmed')
-          setMessages((prev) => {
-            const exists = prev.some(msg => msg.id === m.id)
-            if (exists) return prev
-            return [...prev, m]
-          })
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `sender_id=eq.${user.id}`, // Listen for outgoing (confirmation)
+        },
+        (payload) => {
+           const newMsg = payload.new as Message
+           // Only add if sent to THIS user
+           if (newMsg.receiver_id === selectedUser.id) {
+             // Check to avoid duplicates if optimistic update was used
+             setMessages((prev) => {
+               if (prev.some(m => m.id === newMsg.id)) return prev
+               return [...prev, newMsg]
+             })
+           }
         }
-      })
-      .subscribe((status, err) => {
-        console.log('🔌 Subscription status:', status)
-        if (err) console.error('❌ Subscription error:', err)
-      })
+      )
+      .subscribe()
 
     return () => {
-      console.log('🔌 Cleaning up channel:', channelName)
       supabase.removeChannel(channel)
     }
-  }, [selectedUser?.id, user?.id]) // Use IDs only to prevent unnecessary recreations
+  }, [selectedUser?.id, user?.id])
 
-  const sendMessage = async () => {
+  // 3. Send Message Function
+  const sendMessage = async (e: React.FormEvent) => {
+    e.preventDefault()
     if (!messageInput.trim() || !user || !selectedUser) return
 
-    const messageContent = messageInput.trim()
-    setMessageInput('')
+    const content = messageInput.trim()
+    setMessageInput('') // Clear input immediately
 
     try {
-      // Insert without .select() to avoid 500 errors
       const { error } = await supabase
         .from('messages')
-        .insert([
-          {
-            sender_id: user.id,
-            receiver_id: selectedUser.id,
-            content: messageContent,
-            delivered_at: new Date().toISOString(),
-          },
-        ])
+        .insert({
+          sender_id: user.id,
+          receiver_id: selectedUser.id,
+          content: content,
+          // delivered_at is handled by default now or trigger, but we can send it
+          delivered_at: new Date().toISOString()
+        })
 
       if (error) throw error
-
-      // Don't add optimistically - let realtime subscription handle it
-      // This prevents duplicates
-
-      setConversations((prev) => {
-        const exists = prev.some((p) => p.id === selectedUser.id)
-        return exists ? prev : [...prev, selectedUser]
-      })
+      
+      // Note: We DO NOT call fetchMessages() here. 
+      // The Realtime subscription above will catch our own INSERT and update the UI.
+      
     } catch (error) {
-      console.error('Error sending message:', error)
-      // Restore input on error
-      setMessageInput(messageContent)
+      console.error('Failed to send:', error)
+      setMessageInput(content) // Restore text if failed
     }
-  }
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-    await sendMessage()
   }
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto h-[calc(100vh-120px)] flex gap-4 p-4">
-        {/* Conversations List */}
-        <div className="w-full sm:w-64 glass-effect rounded-2xl border border-dark-700 overflow-hidden flex flex-col">
+      <div className="max-w-4xl mx-auto h-[calc(100vh-100px)] flex gap-4 p-4">
+        
+        {/* LEFT: User List */}
+        <div className={`w-full sm:w-72 glass-effect rounded-2xl border border-dark-700 overflow-hidden flex flex-col ${selectedUser ? 'hidden sm:flex' : 'flex'}`}>
           <div className="p-4 border-b border-dark-700">
             <h2 className="text-xl font-bold text-white">Messages</h2>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-1 p-2">
+          <div className="flex-1 overflow-y-auto p-2 space-y-2">
             {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader className="w-6 h-6 text-syndrome-primary animate-spin" />
-              </div>
+              <div className="flex justify-center p-4"><Loader className="animate-spin text-syndrome-primary" /></div>
             ) : conversations.length === 0 ? (
-              <p className="text-dark-400 text-center py-8">No conversations yet</p>
+              <p className="text-dark-400 text-center mt-4">No conversations yet.</p>
             ) : (
               conversations.map((conv) => (
                 <motion.button
                   key={conv.id}
-                  whileHover={{ scale: 1.02 }}
-                  onClick={() => {
-                    setSelectedUser(conv)
-                  }}
-                  className={`w-full p-3 rounded-lg transition-colors text-left ${
-                    selectedUser?.id === conv.id
-                      ? 'bg-syndrome-primary/20 border border-syndrome-primary'
-                      : 'hover:bg-dark-700'
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setSelectedUser(conv)}
+                  className={`w-full p-3 rounded-xl flex items-center gap-3 transition-all ${
+                    selectedUser?.id === conv.id 
+                      ? 'bg-syndrome-primary/20 border border-syndrome-primary/50' 
+                      : 'hover:bg-dark-800 border border-transparent'
                   }`}
                 >
-                  <p className="font-semibold text-white">{conv.username}</p>
-                  <p className="text-xs text-dark-400">{conv.full_name}</p>
+                  <img src={conv.avatar_url || `https://ui-avatars.com/api/?name=${conv.full_name}`} className="w-10 h-10 rounded-full bg-dark-700" alt="" />
+                  <div className="text-left overflow-hidden">
+                    <p className="font-semibold text-white truncate">{conv.username}</p>
+                    <p className="text-xs text-dark-400 truncate">{conv.full_name}</p>
+                  </div>
                 </motion.button>
               ))
             )}
           </div>
         </div>
 
-        {/* Chat Area */}
+        {/* RIGHT: Chat Box */}
         {selectedUser ? (
-          <div className="flex-1 glass-effect rounded-2xl border border-dark-700 overflow-hidden flex flex-col">
-            {/* Header */}
-            <div className="p-4 border-b border-dark-700 bg-dark-800/50">
-              <h3 className="font-bold text-white">{selectedUser.username}</h3>
-              <p className="text-xs text-dark-400">Online</p>
+          <div className="flex-1 glass-effect rounded-2xl border border-dark-700 flex flex-col overflow-hidden">
+            {/* Chat Header */}
+            <div className="p-4 border-b border-dark-700 bg-dark-800/30 flex items-center gap-3">
+              <button onClick={() => setSelectedUser(null)} className="sm:hidden text-dark-400">← Back</button>
+              <img src={selectedUser.avatar_url || `https://ui-avatars.com/api/?name=${selectedUser.full_name}`} className="w-10 h-10 rounded-full" alt="" />
+              <div>
+                <h3 className="font-bold text-white">{selectedUser.username}</h3>
+                <p className="text-xs text-green-400 flex items-center gap-1">● Online</p>
+              </div>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {messages.map((msg, index) => (
-              <motion.div
-                key={msg.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className={`flex gap-2 ${
-                  msg.sender_id === user?.id ? 'justify-end' : 'justify-start'
-                }`}
-              >
-                {msg.sender_id !== user?.id && msg.sender?.avatar_url && (
-                  <img
-                    src={msg.sender.avatar_url}
-                    alt={msg.sender.username}
-                    className="w-8 h-8 rounded-full object-cover border border-syndrome-primary"
-                  />
-                )}
-                <div className="flex flex-col gap-1">
-                  {msg.sender_id !== user?.id && msg.sender?.username && (
-                    <span className="text-xs text-dark-400 ml-2">{msg.sender.username}</span>
-                  )}
-                  <div
-                    className={`max-w-xs px-4 py-2 rounded-lg ${
-                      msg.sender_id === user?.id
-                        ? 'bg-gradient-to-r from-syndrome-primary to-syndrome-secondary text-white'
-                        : 'bg-dark-800 text-dark-200'
-                    }`}
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth">
+              {messages.map((msg, i) => {
+                const isMe = msg.sender_id === user?.id
+                return (
+                  <motion.div 
+                    key={msg.id || i} 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
                   >
-                    <p className="break-words">{msg.content}</p>
-                    <div className="flex items-center gap-1 mt-1">
-                      <span className="text-xs opacity-70">
-                        {new Date(msg.created_at).toLocaleTimeString()}
-                      </span>
-                      {msg.sender_id === user?.id && (
-                        <>
-                          {msg.seen_at ? (
-                            <CheckCheck className="w-4 h-4" />
-                          ) : msg.delivered_at ? (
-                            <Check className="w-4 h-4" />
-                          ) : null}
-                        </>
-                      )}
+                    <div className={`max-w-[75%] px-4 py-2 rounded-2xl ${
+                      isMe 
+                        ? 'bg-syndrome-primary text-white rounded-br-none' 
+                        : 'bg-dark-700 text-dark-100 rounded-bl-none'
+                    }`}>
+                      <p>{msg.content}</p>
+                      <div className={`text-[10px] mt-1 flex items-center justify-end gap-1 ${isMe ? 'text-white/70' : 'text-dark-400'}`}>
+                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {isMe && <CheckCheck className="w-3 h-3" />}
+                      </div>
                     </div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
+                  </motion.div>
+                )
+              })}
+              <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
-            <form
-              onSubmit={handleSendMessage}
-              className="p-4 border-t border-dark-700 bg-dark-800/50 flex gap-2"
-            >
+            {/* Input Area */}
+            <form onSubmit={sendMessage} className="p-3 border-t border-dark-700 bg-dark-800/30 flex gap-2">
               <input
                 type="text"
                 value={messageInput}
                 onChange={(e) => setMessageInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    // Send on Enter
-                    sendMessage()
-                  }
-                }}
                 placeholder="Type a message..."
-                className="flex-1 px-4 py-2 rounded-lg bg-dark-700 border border-dark-600 focus:border-syndrome-primary focus:outline-none text-white placeholder-dark-500"
+                className="flex-1 bg-dark-900/50 border border-dark-600 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-syndrome-primary transition-colors"
               />
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+              <button 
                 type="submit"
-                className="p-2 rounded-lg bg-syndrome-primary hover:bg-syndrome-primary/80 transition-colors text-white"
+                disabled={!messageInput.trim()}
+                className="bg-syndrome-primary p-2 rounded-xl text-white disabled:opacity-50 hover:bg-syndrome-secondary transition-colors"
               >
                 <Send className="w-5 h-5" />
-              </motion.button>
+              </button>
             </form>
           </div>
         ) : (
-          <div className="flex-1 glass-effect rounded-2xl border border-dark-700 flex items-center justify-center">
-            <p className="text-dark-400">Select a conversation to start chatting</p>
+          <div className="hidden sm:flex flex-1 glass-effect rounded-2xl border border-dark-700 items-center justify-center flex-col text-dark-400 gap-4">
+            <div className="w-16 h-16 rounded-full bg-dark-800 flex items-center justify-center">
+              <Send className="w-8 h-8 opacity-50" />
+            </div>
+            <p>Select a conversation to start chatting</p>
           </div>
         )}
+
       </div>
     </Layout>
   )
