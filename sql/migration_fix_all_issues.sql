@@ -156,12 +156,15 @@ WITH CHECK (auth.uid() IS NOT NULL);
 -- PART 3: COMMENT COUNT TRIGGERS (AUTOMATIC UPDATES)
 -- ============================================================================
 
--- Function to automatically increment comments count
+-- Function to automatically increment comments count (bypass RLS)
 CREATE OR REPLACE FUNCTION auto_increment_comments_count()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
+  -- Bypass RLS by running as function owner
   UPDATE posts
   SET comments_count = comments_count + 1
   WHERE id = NEW.post_id;
@@ -169,12 +172,15 @@ BEGIN
 END;
 $$;
 
--- Function to automatically decrement comments count
+-- Function to automatically decrement comments count (bypass RLS)
 CREATE OR REPLACE FUNCTION auto_decrement_comments_count()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
+  -- Bypass RLS by running as function owner
   UPDATE posts
   SET comments_count = GREATEST(0, comments_count - 1)
   WHERE id = OLD.post_id;
@@ -196,6 +202,12 @@ CREATE TRIGGER trigger_decrement_comment_count
   AFTER DELETE ON comments
   FOR EACH ROW
   EXECUTE FUNCTION auto_decrement_comments_count();
+
+-- Backfill: ensure existing posts have accurate counts
+UPDATE posts p
+SET comments_count = COALESCE((
+  SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id
+), 0);
 
 -- ============================================================================
 -- PART 4: NOTIFICATION TRIGGERS
