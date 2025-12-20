@@ -104,11 +104,19 @@ const MessagesPage: React.FC = () => {
         schema: 'public',
         table: 'messages',
         filter: `receiver_id=eq.${user.id}`
-      }, (payload) => {
+      }, async (payload) => {
         const m = payload.new as Message
         // Only append if the message belongs to the open conversation
         if (m.sender_id === selectedUser.id) {
-          setMessages((prev) => [...prev, m])
+          // Fetch sender profile
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('id, username, avatar_url, is_private, full_name, bio, created_at, updated_at')
+            .eq('id', m.sender_id)
+            .single()
+          
+          const msgWithProfile: Message = { ...m, sender: senderProfile || undefined }
+          setMessages((prev) => [...prev, msgWithProfile])
         }
       })
       // Outgoing messages sent by the current user
@@ -117,10 +125,18 @@ const MessagesPage: React.FC = () => {
         schema: 'public',
         table: 'messages',
         filter: `sender_id=eq.${user.id}`
-      }, (payload) => {
+      }, async (payload) => {
         const m = payload.new as Message
         if (m.receiver_id === selectedUser.id) {
-          setMessages((prev) => [...prev, m])
+          // Fetch sender profile
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('id, username, avatar_url, is_private, full_name, bio, created_at, updated_at')
+            .eq('id', m.sender_id)
+            .single()
+          
+          const msgWithProfile: Message = { ...m, sender: senderProfile || undefined }
+          setMessages((prev) => [...prev, msgWithProfile])
         }
       })
       .subscribe()
@@ -133,34 +149,53 @@ const MessagesPage: React.FC = () => {
   const sendMessage = async () => {
     if (!messageInput.trim() || !user || !selectedUser) return
 
+    const messageContent = messageInput.trim()
+    setMessageInput('')
+
     try {
-      const { data, error } = await supabase
+      // Insert without .select() to avoid 500 errors
+      const { error } = await supabase
         .from('messages')
         .insert([
           {
             sender_id: user.id,
             receiver_id: selectedUser.id,
-            content: messageInput,
+            content: messageContent,
             delivered_at: new Date().toISOString(),
           },
         ])
-        // Return the inserted row without embedding profiles to avoid FK ambiguity
-        .select('*')
-        .single()
 
       if (error) throw error
-      if (data) {
-        // Optimistically append our sent message so it appears instantly
-        setMessages((prev) => [...prev, data as unknown as Message])
-        // Ensure the conversation appears in the list
-        setConversations((prev) => {
-          const exists = prev.some((p) => p.id === selectedUser.id)
-          return exists ? prev : [...prev, selectedUser]
-        })
+
+      // Optimistically construct the message with sender profile
+      const optimisticMessage: Message = {
+        id: crypto.randomUUID() as any,
+        sender_id: user.id,
+        receiver_id: selectedUser.id,
+        content: messageContent,
+        message_type: 'text',
+        created_at: new Date().toISOString(),
+        sender: {
+          id: user.id,
+          username: 'You',
+          avatar_url: undefined,
+          is_private: false,
+          full_name: '',
+          bio: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
       }
-      setMessageInput('')
+
+      setMessages((prev) => [...prev, optimisticMessage])
+      setConversations((prev) => {
+        const exists = prev.some((p) => p.id === selectedUser.id)
+        return exists ? prev : [...prev, selectedUser]
+      })
     } catch (error) {
       console.error('Error sending message:', error)
+      // Restore input on error
+      setMessageInput(messageContent)
     }
   }
 
@@ -218,16 +253,27 @@ const MessagesPage: React.FC = () => {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {messages.map((msg, index) => (
-                <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className={`flex ${
-                    msg.sender_id === user?.id ? 'justify-end' : 'justify-start'
-                  }`}
-                >
+            {messages.map((msg, index) => (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className={`flex gap-2 ${
+                  msg.sender_id === user?.id ? 'justify-end' : 'justify-start'
+                }`}
+              >
+                {msg.sender_id !== user?.id && msg.sender?.avatar_url && (
+                  <img
+                    src={msg.sender.avatar_url}
+                    alt={msg.sender.username}
+                    className="w-8 h-8 rounded-full object-cover border border-syndrome-primary"
+                  />
+                )}
+                <div className="flex flex-col gap-1">
+                  {msg.sender_id !== user?.id && msg.sender?.username && (
+                    <span className="text-xs text-dark-400 ml-2">{msg.sender.username}</span>
+                  )}
                   <div
                     className={`max-w-xs px-4 py-2 rounded-lg ${
                       msg.sender_id === user?.id
@@ -251,8 +297,9 @@ const MessagesPage: React.FC = () => {
                       )}
                     </div>
                   </div>
-                </motion.div>
-              ))}
+                </div>
+              </motion.div>
+            ))}
             </div>
 
             {/* Input */}
