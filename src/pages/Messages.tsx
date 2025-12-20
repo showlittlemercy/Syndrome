@@ -129,6 +129,38 @@ const MessagesPage: React.FC = () => {
     }
   }, [selectedUser?.id, user?.id])
 
+  // Mark messages as seen in the database whenever the thread is open and has unseen incoming messages.
+  useEffect(() => {
+    if (!user || !selectedUser) return
+
+    const unseen = messages.some(
+      (msg) => msg.sender_id === selectedUser.id && !msg.seen_at
+    )
+
+    if (!unseen) return
+
+    const markSeen = async () => {
+      const seenAt = new Date().toISOString()
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.sender_id === selectedUser.id && !msg.seen_at
+            ? { ...msg, seen_at: seenAt }
+            : msg
+        )
+      )
+
+      await supabase
+        .from('messages')
+        .update({ seen_at: seenAt })
+        .eq('receiver_id', user.id)
+        .eq('sender_id', selectedUser.id)
+        .is('seen_at', null)
+    }
+
+    markSeen()
+  }, [messages, selectedUser?.id, user?.id])
+
   // 3. Send Message
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
