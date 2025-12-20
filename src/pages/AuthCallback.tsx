@@ -13,14 +13,21 @@ const AuthCallbackPage: React.FC = () => {
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        setStatus('Getting session...')
-        console.log('🔄 Callback: Getting session from URL')
+        setStatus('Processing OAuth callback...')
+        console.log('🔄 Callback: Processing OAuth redirect')
+        console.log('Current URL:', window.location.href)
         
-        // Exchange the code in the URL for a session
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        // Supabase automatically processes the hash/code on page load
+        // We just need to wait a moment for it to process
+        await new Promise(resolve => setTimeout(resolve, 500))
         
-        console.log('Session:', session)
+        // Now get the session
+        const { data, error: sessionError } = await supabase.auth.getSession()
+        
+        console.log('Session:', data.session)
         console.log('Session error:', sessionError)
+        
+        const session = data.session
 
         if (sessionError) {
           console.error('Session error:', sessionError)
