@@ -8,3 +8,8 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+// Module declaration for Vite PWA virtual module
+declare module 'virtual:pwa-register' {
+  export function registerSW(options?: { immediate?: boolean }): (reloadPage?: boolean) => void
+}

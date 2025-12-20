@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
 import { Loader } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'

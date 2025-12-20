@@ -262,16 +262,24 @@ const SignUpPage: React.FC = () => {
             whileTap={{ scale: 0.98 }}
             type="button"
             onClick={handleGoogleSignUp}
-            disabled={true}
-            className="w-full py-3 rounded-lg border border-dark-600 text-dark-400 font-semibold bg-dark-800/50 cursor-not-allowed flex items-center justify-center gap-2"
-            title="Google OAuth needs to be configured in Supabase"
+            disabled={isOAuthLoading}
+            className="w-full py-3 rounded-lg border border-dark-600 text-white font-semibold hover:bg-dark-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <img 
-              src="https://www.svgrepo.com/show/475656/google-color.svg" 
-              alt="Google" 
-              className="w-5 h-5 opacity-50"
-            />
-            Google (Configure in Supabase)
+            {isOAuthLoading ? (
+              <>
+                <Loader className="w-5 h-5 animate-spin" />
+                Connecting...
+              </>
+            ) : (
+              <>
+                <img 
+                  src="https://www.svgrepo.com/show/475656/google-color.svg" 
+                  alt="Google" 
+                  className="w-5 h-5"
+                />
+                Google
+              </>
+            )}
           </motion.button>
 
           {/* Sign In Link */}
