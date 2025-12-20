@@ -88,8 +88,7 @@ const PostDetailPage: React.FC = () => {
       setComments([...comments, data])
       setCommentInput('')
 
-      // Update comments count
-      await supabase.rpc('increment_comments_count', { post_id: postId })
+      // Update local state (database trigger updates the actual count)
       if (post) {
         setPost({ ...post, comments_count: post.comments_count + 1 })
       }
@@ -114,8 +113,7 @@ const PostDetailPage: React.FC = () => {
 
       setComments(comments.filter((c) => c.id !== commentId))
 
-      // Update comments count
-      await supabase.rpc('decrement_comments_count', { post_id: postId })
+      // Update local state (database trigger updates the actual count)
       if (post) {
         setPost({ ...post, comments_count: Math.max(0, post.comments_count - 1) })
       }
