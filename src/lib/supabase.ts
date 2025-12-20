@@ -19,30 +19,12 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     params: {
       eventsPerSecond: 10,
     },
-    heartbeatIntervalMs: 30000, // Send heartbeat every 30 seconds
-    reconnectAfterMs: (tries) => {
-      // Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
-      return Math.min(1000 * Math.pow(2, tries), 30000)
-    },
   },
   global: {
     headers: {
       'x-client-info': 'syndrome-app',
     },
   },
-})
-
-// Log connection state changes
-supabase.realtime.onOpen(() => {
-  console.log('✅ Realtime connection opened')
-})
-
-supabase.realtime.onClose(() => {
-  console.warn('⚠️ Realtime connection closed')
-})
-
-supabase.realtime.onError((error) => {
-  console.error('❌ Realtime connection error:', error)
 })
 
 // Helper function to get current user
