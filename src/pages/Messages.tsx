@@ -134,7 +134,7 @@ const MessagesPage: React.FC = () => {
 
     fetchMessages()
 
-    // Subscribe to new messages via realtime
+    // Subscribe to new messages via realtime - use IDs only to prevent recreating
     const channelName = `messages-${user.id}-${selectedUser.id}`
     console.log('📡 Setting up realtime channel:', channelName)
     
@@ -150,7 +150,7 @@ const MessagesPage: React.FC = () => {
         const m = payload.new as Message
         // Only if from selected conversation
         if (m.sender_id === selectedUser.id) {
-          console.log('📨 Received message from', selectedUser.username)
+          console.log('📨 Received message from', selectedUser.id)
           // Fetch sender profile only if we don't have it
           const { data: senderProfile } = await supabase
             .from('profiles')
@@ -192,7 +192,7 @@ const MessagesPage: React.FC = () => {
       console.log('🔌 Cleaning up channel:', channelName)
       supabase.removeChannel(channel)
     }
-  }, [selectedUser, user])
+  }, [selectedUser?.id, user?.id]) // Use IDs only to prevent unnecessary recreations
 
   const sendMessage = async () => {
     if (!messageInput.trim() || !user || !selectedUser) return
