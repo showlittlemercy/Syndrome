@@ -98,21 +98,30 @@ const MessagesPage: React.FC = () => {
     // Subscribe to new messages via realtime
     const channel = supabase
       .channel('messages-stream')
+      // Incoming messages to the current user
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'messages',
         filter: `receiver_id=eq.${user.id}`
       }, (payload) => {
-        setMessages((prev) => [...prev, payload.new as Message])
+        const m = payload.new as Message
+        // Only append if the message belongs to the open conversation
+        if (m.sender_id === selectedUser.id) {
+          setMessages((prev) => [...prev, m])
+        }
       })
+      // Outgoing messages sent by the current user
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'messages',
-        filter: `sender_id=eq.${selectedUser.id}`
+        filter: `sender_id=eq.${user.id}`
       }, (payload) => {
-        setMessages((prev) => [...prev, payload.new as Message])
+        const m = payload.new as Message
+        if (m.receiver_id === selectedUser.id) {
+          setMessages((prev) => [...prev, m])
+        }
       })
       .subscribe()
 
@@ -127,16 +136,29 @@ const MessagesPage: React.FC = () => {
     if (!messageInput.trim() || !user || !selectedUser) return
 
     try {
-      const { error } = await supabase.from('messages').insert([
-        {
-          sender_id: user.id,
-          receiver_id: selectedUser.id,
-          content: messageInput,
-          delivered_at: new Date().toISOString(),
-        },
-      ])
+      const { data, error } = await supabase
+        .from('messages')
+        .insert([
+          {
+            sender_id: user.id,
+            receiver_id: selectedUser.id,
+            content: messageInput,
+            delivered_at: new Date().toISOString(),
+          },
+        ])
+        .select(`*, sender:profiles(username, avatar_url)`) // return the inserted row
+        .single()
 
       if (error) throw error
+      if (data) {
+        // Optimistically append our sent message so it appears instantly
+        setMessages((prev) => [...prev, data as unknown as Message])
+        // Ensure the conversation appears in the list
+        setConversations((prev) => {
+          const exists = prev.some((p) => p.id === selectedUser.id)
+          return exists ? prev : [...prev, selectedUser]
+        })
+      }
       setMessageInput('')
     } catch (error) {
       console.error('Error sending message:', error)

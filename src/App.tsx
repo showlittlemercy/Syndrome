@@ -17,7 +17,16 @@ import NotificationsPage from './pages/Notifications'
 import './styles/global.css'
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuthStore()
+  const { user, isLoading } = useAuthStore()
+
+  // While we are checking the persisted session, don't redirect.
+  if (isLoading) {
+    return (
+      <div className="w-full h-screen flex items-center justify-center text-white">
+        Loading...
+      </div>
+    )
+  }
 
   if (!user) {
     return <Navigate to="/auth/signin" replace />
