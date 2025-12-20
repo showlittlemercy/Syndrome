@@ -21,30 +21,38 @@ const MessagesPage: React.FC = () => {
       if (!user) return
 
       try {
-        // Get messages where user is either sender or receiver
+        // Get all messages for the user (RLS policy handles filtering)
         const { data, error } = await supabase
           .from('messages')
           .select('sender_id, receiver_id')
           .order('created_at', { ascending: false })
 
-        if (error) throw error
+        if (error) {
+          console.error('RLS error or query error:', error)
+          throw error
+        }
 
-        // Extract unique user IDs (exclude current user)
+        // Extract unique conversation partners
         const userIds = new Set<string>()
-        data.forEach((msg: any) => {
-          if (msg.sender_id !== user.id) userIds.add(msg.sender_id)
-          if (msg.receiver_id && msg.receiver_id !== user.id) userIds.add(msg.receiver_id)
+        data?.forEach((msg: any) => {
+          if (msg.sender_id !== user.id && msg.sender_id) userIds.add(msg.sender_id)
+          if (msg.receiver_id !== user.id && msg.receiver_id) userIds.add(msg.receiver_id)
         })
 
-        // Fetch user profiles
+        // Fetch profiles for conversation partners
         if (userIds.size > 0) {
           const { data: profiles, error: profileError } = await supabase
             .from('profiles')
             .select('*')
             .in('id', Array.from(userIds))
 
-          if (profileError) throw profileError
+          if (profileError) {
+            console.error('Profile fetch error:', profileError)
+            throw profileError
+          }
           setConversations(profiles || [])
+        } else {
+          setConversations([])
         }
       } catch (error) {
         console.error('Error fetching conversations:', error)
@@ -77,22 +85,22 @@ const MessagesPage: React.FC = () => {
 
     const fetchMessages = async () => {
       try {
+        // Get messages where current user is sender OR receiver
+        // AND the other user is the selected user
         const { data, error } = await supabase
           .from('messages')
           .select('*')
-          .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-          .or(`sender_id.eq.${selectedUser.id},receiver_id.eq.${selectedUser.id}`)
+          .or(
+            `and(sender_id.eq.${user.id},receiver_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},receiver_id.eq.${user.id})`
+          )
           .order('created_at')
 
-        if (error) throw error
+        if (error) {
+          console.error('Error in fetchMessages:', error)
+          throw error
+        }
         
-        // Filter to only messages between these two users
-        const filtered = (data || []).filter(
-          (msg: any) =>
-            (msg.sender_id === user.id && msg.receiver_id === selectedUser.id) ||
-            (msg.sender_id === selectedUser.id && msg.receiver_id === user.id)
-        )
-        setMessages(filtered)
+        setMessages(data || [])
       } catch (error) {
         console.error('Error fetching messages:', error)
       }
