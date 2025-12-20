@@ -112,16 +112,19 @@ const MessagesPage: React.FC = () => {
         const allMessages = [...(sentMessages || []), ...(receivedMessages || [])]
           .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
 
-        // Fetch sender profiles for all messages
-        const senderIds = new Set(allMessages.map(m => m.sender_id))
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('*')
-          .in('id', Array.from(senderIds))
+        // Fetch sender profiles for all messages (only if we have sender ids)
+        let profileMap = new Map<string, Profile>()
+        const senderIds = Array.from(new Set(allMessages.map(m => m.sender_id)))
+        if (senderIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('*')
+            .in('id', senderIds)
+          profileMap = new Map(profiles?.map((p) => [p.id, p]) || [])
+        }
 
         // Attach profiles to messages
-        const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
-        const messagesWithProfiles = allMessages.map(msg => ({
+        const messagesWithProfiles = allMessages.map((msg) => ({
           ...msg,
           sender: profileMap.get(msg.sender_id),
         }))
@@ -151,18 +154,49 @@ const MessagesPage: React.FC = () => {
         // Only if from selected conversation
         if (m.sender_id === selectedUser.id) {
           console.log('📨 Received message from', selectedUser.id)
-          // Fetch sender profile only if we don't have it
-          const { data: senderProfile } = await supabase
-            .from('profiles')
-            .select('id, username, avatar_url')
-            .eq('id', m.sender_id)
-            .single()
-          
+          // Fetch sender profile only if we don't have it (use current state to avoid stale closure)
           setMessages((prev) => {
             const exists = prev.some(msg => msg.id === m.id)
             if (exists) return prev
-            return [...prev, { ...m, sender: senderProfile || undefined }]
+
+            const existingProfile = prev.find((msg) => msg.sender_id === m.sender_id)?.sender
+
+            if (existingProfile) {
+              return [...prev, { ...m, sender: existingProfile }]
+            }
+
+            // No existing profile in state; fetch synchronously inside set
+            return [...prev, { ...m, sender: undefined }]
           })
+
+          // Kick off profile fetch in background if we didn't have it
+          const existingProfile = messages.find((msg) => msg.sender_id === m.sender_id)?.sender
+          if (!existingProfile) {
+            const { data } = await supabase
+              .from('profiles')
+              .select('id, username, avatar_url, full_name, bio, is_private, created_at, updated_at')
+              .eq('id', m.sender_id)
+              .single()
+
+            if (data) {
+              setMessages((prev) => prev.map((msg) => (
+                msg.id === m.id
+                  ? {
+                      ...msg,
+                      sender: {
+                        ...msg.sender,
+                        ...data,
+                        is_private: (data as any)?.is_private ?? msg.sender?.is_private ?? false,
+                        full_name: (data as any)?.full_name ?? msg.sender?.full_name ?? '',
+                        bio: (data as any)?.bio ?? msg.sender?.bio ?? '',
+                        created_at: (data as any)?.created_at ?? msg.sender?.created_at ?? new Date().toISOString(),
+                        updated_at: (data as any)?.updated_at ?? msg.sender?.updated_at ?? new Date().toISOString(),
+                      },
+                    }
+                  : msg
+              )))
+            }
+          }
         }
       })
       // Listen for messages WHERE other user is receiver (messages we sent)

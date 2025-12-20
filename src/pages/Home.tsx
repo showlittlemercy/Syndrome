@@ -53,12 +53,12 @@ const HomePage: React.FC = () => {
     } finally {
       setIsLoading(false)
     }
-  }, []) // Remove user dependency - use closure instead
+  }, [user?.id]) // depend only on user id to avoid endless re-renders
 
   useEffect(() => {
     if (!user) return // Wait for user to load
     fetchPosts(0)
-  }, [fetchPosts]) // Only depend on fetchPosts, not user
+  }, [fetchPosts, user])
 
   // Realtime: update comments_count in feed when posts are updated by triggers
   useEffect(() => {
