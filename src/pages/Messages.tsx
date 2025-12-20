@@ -109,9 +109,10 @@ const MessagesPage: React.FC = () => {
     fetchMessages()
 
     // Subscribe to new messages via realtime
+    const channelName = `messages-${user.id}-${selectedUser.id}`
     const channel = supabase
-      .channel('messages-stream')
-      // Incoming messages to the current user
+      .channel(channelName)
+      // Listen for ALL new messages in the conversation (both directions)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -119,8 +120,8 @@ const MessagesPage: React.FC = () => {
         filter: `receiver_id=eq.${user.id}`
       }, async (payload) => {
         const m = payload.new as Message
-        // Only append if the message belongs to the open conversation
-        if (m.sender_id === selectedUser.id) {
+        // Only append if message is from the selected conversation partner
+        if (m.sender_id === selectedUser.id && m.receiver_id === user.id) {
           // Fetch sender profile
           const { data: senderProfile } = await supabase
             .from('profiles')
@@ -129,18 +130,23 @@ const MessagesPage: React.FC = () => {
             .single()
           
           const msgWithProfile: Message = { ...m, sender: senderProfile || undefined }
-          setMessages((prev) => [...prev, msgWithProfile])
+          // Prevent duplicates
+          setMessages((prev) => {
+            const exists = prev.some(msg => msg.id === m.id)
+            if (exists) return prev
+            return [...prev, msgWithProfile]
+          })
         }
       })
-      // Outgoing messages sent by the current user
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'messages',
-        filter: `sender_id=eq.${user.id}`
+        filter: `receiver_id=eq.${selectedUser.id}`
       }, async (payload) => {
         const m = payload.new as Message
-        if (m.receiver_id === selectedUser.id) {
+        // Only append if message is sent by current user to selected conversation partner
+        if (m.sender_id === user.id && m.receiver_id === selectedUser.id) {
           // Fetch sender profile
           const { data: senderProfile } = await supabase
             .from('profiles')
@@ -149,12 +155,20 @@ const MessagesPage: React.FC = () => {
             .single()
           
           const msgWithProfile: Message = { ...m, sender: senderProfile || undefined }
-          setMessages((prev) => [...prev, msgWithProfile])
+          // Prevent duplicates
+          setMessages((prev) => {
+            const exists = prev.some(msg => msg.id === m.id)
+            if (exists) return prev
+            return [...prev, msgWithProfile]
+          })
         }
       })
-      .subscribe()
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status)
+      })
 
     return () => {
+      console.log('Cleaning up realtime channel:', channelName)
       supabase.removeChannel(channel)
     }
   }, [selectedUser, user])
@@ -180,27 +194,9 @@ const MessagesPage: React.FC = () => {
 
       if (error) throw error
 
-      // Optimistically construct the message with sender profile
-      const optimisticMessage: Message = {
-        id: crypto.randomUUID() as any,
-        sender_id: user.id,
-        receiver_id: selectedUser.id,
-        content: messageContent,
-        message_type: 'text',
-        created_at: new Date().toISOString(),
-        sender: {
-          id: user.id,
-          username: 'You',
-          avatar_url: undefined,
-          is_private: false,
-          full_name: '',
-          bio: '',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      }
+      // Don't add optimistically - let realtime subscription handle it
+      // This prevents duplicates
 
-      setMessages((prev) => [...prev, optimisticMessage])
       setConversations((prev) => {
         const exists = prev.some((p) => p.id === selectedUser.id)
         return exists ? prev : [...prev, selectedUser]
