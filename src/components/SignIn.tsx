@@ -49,9 +49,13 @@ const SignInPage: React.FC = () => {
     setError(null)
     try {
       setIsOAuthLoading(true)
+      
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
+          // Ye line sabse important hai - Login ke baad user ko sahi jagah wapis lata hai
+          redirectTo: `${window.location.origin}/home`, 
+          
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
@@ -60,7 +64,10 @@ const SignInPage: React.FC = () => {
       })
 
       if (oauthError) throw oauthError
-      // Supabase will redirect; no need to navigate manually here
+      
+      // Note: Yahan manually navigate karne ki zaroorat nahi hoti, 
+      // Supabase khud page ko reload karke redirect kar dega.
+      
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Google sign-in failed'
       setError(message)
