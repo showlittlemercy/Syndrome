@@ -69,7 +69,7 @@ const PostDetailPage: React.FC = () => {
   useEffect(() => {
     if (!postId) return
     
-    const channelName = `post-detail-${postId}-${Date.now()}`
+    const channelName = `post-detail-${postId}`
     console.log('🔌 Creating PostDetail realtime channel:', channelName)
     
     const channel = supabase

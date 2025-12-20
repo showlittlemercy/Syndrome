@@ -62,8 +62,8 @@ const HomePage: React.FC = () => {
 
   // Realtime: update comments_count in feed when posts are updated by triggers
   useEffect(() => {
-    // Use unique channel name to avoid conflicts
-    const channelName = `posts-updates-${Date.now()}`
+    // Use stable channel name - no timestamps!
+    const channelName = 'posts-updates'
     console.log('🔌 Creating Home realtime channel:', channelName)
     
     const channel = supabase
