@@ -130,9 +130,7 @@ const MessagesPage: React.FC = () => {
     }
   }, [selectedUser, user])
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-
+  const sendMessage = async () => {
     if (!messageInput.trim() || !user || !selectedUser) return
 
     try {
@@ -146,7 +144,8 @@ const MessagesPage: React.FC = () => {
             delivered_at: new Date().toISOString(),
           },
         ])
-        .select(`*, sender:profiles(username, avatar_url)`) // return the inserted row
+        // Return the inserted row without embedding profiles to avoid FK ambiguity
+        .select('*')
         .single()
 
       if (error) throw error
@@ -163,6 +162,11 @@ const MessagesPage: React.FC = () => {
     } catch (error) {
       console.error('Error sending message:', error)
     }
+  }
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await sendMessage()
   }
 
   return (
@@ -260,6 +264,13 @@ const MessagesPage: React.FC = () => {
                 type="text"
                 value={messageInput}
                 onChange={(e) => setMessageInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    // Send on Enter
+                    sendMessage()
+                  }
+                }}
                 placeholder="Type a message..."
                 className="flex-1 px-4 py-2 rounded-lg bg-dark-700 border border-dark-600 focus:border-syndrome-primary focus:outline-none text-white placeholder-dark-500"
               />
