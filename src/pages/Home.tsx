@@ -53,11 +53,12 @@ const HomePage: React.FC = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [user])
+  }, []) // Remove user dependency - use closure instead
 
   useEffect(() => {
+    if (!user) return // Wait for user to load
     fetchPosts(0)
-  }, [fetchPosts])
+  }, [fetchPosts]) // Only depend on fetchPosts, not user
 
   // Realtime: update comments_count in feed when posts are updated by triggers
   useEffect(() => {
@@ -104,7 +105,7 @@ const HomePage: React.FC = () => {
     }
 
     return () => observer.disconnect()
-  }, [hasMore, isLoading, page, fetchPosts])
+  }, [hasMore, isLoading, page]) // Remove fetchPosts from deps
 
   const containerVariants = {
     hidden: { opacity: 0 },
