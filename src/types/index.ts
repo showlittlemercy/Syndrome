@@ -65,6 +65,20 @@ export interface Message {
   sender?: Profile;
 }
 
+// Notification-related types
+export interface Notification {
+  id: string;
+  user_id: string;
+  actor_id: string;
+  type: 'like' | 'comment' | 'follow' | 'message';
+  post_id?: string;
+  comment_id?: string;
+  content?: string;
+  read: boolean;
+  created_at: string;
+  actor?: Profile;
+}
+
 // Group-related types
 export interface Group {
   id: string;

@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Loader, Send, Check, CheckCheck } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { supabase } from '../lib/supabase'
 import { Message, Profile } from '../types'
 import { useAuthStore } from '../lib/store'
 
 const MessagesPage: React.FC = () => {
+  const [searchParams] = useSearchParams()
   const [conversations, setConversations] = useState<Profile[]>([])
   const [selectedUser, setSelectedUser] = useState<Profile | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -53,7 +55,23 @@ const MessagesPage: React.FC = () => {
     }
 
     fetchConversations()
-  }, [user])
+
+    // Check if userId query param exists (from profile message button)
+    const userIdParam = searchParams.get('userId')
+    if (userIdParam && user) {
+      // Fetch that user's profile and auto-select them
+      supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userIdParam)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setSelectedUser(data as Profile)
+          }
+        })
+    }
+  }, [user, searchParams])
 
   useEffect(() => {
     if (!selectedUser || !user) return

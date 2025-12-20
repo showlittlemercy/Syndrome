@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Heart, MessageCircle, Share2, Loader, Bookmark, MoreVertical, Trash } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { supabase, deleteImage } from '../lib/supabase'
 import { Post } from '../types'
 import { useAuthStore } from '../lib/store'
@@ -8,17 +9,17 @@ import { useAuthStore } from '../lib/store'
 interface PostCardProps {
   post: Post
   onLikeChange?: () => void
-  onCommentClick?: () => void
   onPostDeleted?: () => void
 }
 
-const PostCard: React.FC<PostCardProps> = ({ post, onLikeChange, onCommentClick, onPostDeleted }) => {
+const PostCard: React.FC<PostCardProps> = ({ post, onLikeChange, onPostDeleted }) => {
   const [isLiked, setIsLiked] = useState(post.isLiked || false)
   const [isSaved, setIsSaved] = useState(post.isSaved || false)
   const [likeCount, setLikeCount] = useState(post.likes_count)
   const [isLoading, setIsLoading] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const { user } = useAuthStore()
+  const navigate = useNavigate()
 
   const handleLike = async () => {
     if (!user || isLoading) return
@@ -182,7 +183,10 @@ const PostCard: React.FC<PostCardProps> = ({ post, onLikeChange, onCommentClick,
       <div className="p-4 space-y-3">
         {/* User Info */}
         <div className="flex items-center gap-3 justify-between">
-          <div className="flex items-center gap-3">
+          <div 
+            className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => navigate(`/profile/${post.user_id}`)}
+          >
           {post.user?.avatar_url && (
             <img
               src={post.user.avatar_url}
@@ -259,7 +263,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, onLikeChange, onCommentClick,
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
-            onClick={onCommentClick}
+            onClick={() => navigate(`/post/${post.id}`)}
             className="flex items-center gap-2 text-dark-400 hover:text-syndrome-primary transition-colors"
           >
             <MessageCircle className="w-5 h-5" />

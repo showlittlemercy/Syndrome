@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Loader } from 'lucide-react'
+import { Loader, MessageCircle } from 'lucide-react'
+import { useParams, useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { Post, Profile } from '../types'
 
 const ProfilePage: React.FC = () => {
-  const { profile, user } = useAuthStore()
+  const { userId } = useParams<{ userId: string }>()
+  const navigate = useNavigate()
+  const { profile: currentUserProfile, user } = useAuthStore()
+  const [viewedProfile, setViewedProfile] = useState<Profile | null>(null)
   const [postCount, setPostCount] = useState(0)
   const [followerCount, setFollowerCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
@@ -19,19 +23,24 @@ const ProfilePage: React.FC = () => {
   const [isTabLoading, setIsTabLoading] = useState(false)
   const [listModal, setListModal] = useState<'followers' | 'following' | null>(null)
   const [listItems, setListItems] = useState<Profile[]>([])
+  const [isFollowing, setIsFollowing] = useState(false)
   const [editData, setEditData] = useState({
-    full_name: profile?.full_name || '',
-    bio: profile?.bio || '',
+    full_name: currentUserProfile?.full_name || '',
+    bio: currentUserProfile?.bio || '',
   })
 
+  const isOwnProfile = !userId || userId === user?.id
+  const profile = isOwnProfile ? currentUserProfile : viewedProfile
+  const profileUserId = userId || user?.id
+
   const loadUserPosts = async () => {
-    if (!user) return
+    if (!profileUserId) return
     setIsTabLoading(true)
     try {
       const { data, error } = await supabase
         .from('posts')
         .select('*, user:profiles(id, username, avatar_url)')
-        .eq('user_id', user.id)
+        .eq('user_id', profileUserId)
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -68,20 +77,20 @@ const ProfilePage: React.FC = () => {
   }
 
   const openList = async (type: 'followers' | 'following') => {
-    if (!user) return
+    if (!profileUserId) return
     setListModal(type)
     try {
       if (type === 'followers') {
         const { data } = await supabase
           .from('follows')
           .select('follower:profiles(id, username, avatar_url, full_name)')
-          .eq('following_id', user.id)
+          .eq('following_id', profileUserId)
         setListItems((data || []).map((row: any) => row.follower).filter(Boolean))
       } else {
         const { data } = await supabase
           .from('follows')
           .select('following:profiles(id, username, avatar_url, full_name)')
-          .eq('follower_id', user.id)
+          .eq('follower_id', profileUserId)
         setListItems((data || []).map((row: any) => row.following).filter(Boolean))
       }
     } catch (err) {
@@ -90,42 +99,69 @@ const ProfilePage: React.FC = () => {
   }
 
   useEffect(() => {
-    const fetchStats = async () => {
-      if (!user) return
+    const fetchProfileData = async () => {
+      if (!profileUserId) return
+      setIsLoading(true)
 
       try {
+        // If viewing someone else's profile, fetch their data
+        if (!isOwnProfile) {
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single()
+
+          if (profileError) throw profileError
+          setViewedProfile(profileData as Profile)
+
+          // Check if current user follows this profile
+          if (user) {
+            const { data: followData } = await supabase
+              .from('follows')
+              .select('id')
+              .eq('follower_id', user.id)
+              .eq('following_id', userId)
+              .maybeSingle()
+            
+            setIsFollowing(!!followData)
+          }
+        }
+
         // Fetch post count
         const { count: posts } = await supabase
           .from('posts')
           .select('*', { count: 'exact' })
-          .eq('user_id', user.id)
+          .eq('user_id', profileUserId)
 
         // Fetch follower count
         const { count: followers } = await supabase
           .from('follows')
           .select('*', { count: 'exact' })
-          .eq('following_id', user.id)
+          .eq('following_id', profileUserId)
 
         // Fetch following count
         const { count: following } = await supabase
           .from('follows')
           .select('*', { count: 'exact' })
-          .eq('follower_id', user.id)
+          .eq('follower_id', profileUserId)
 
         setPostCount(posts || 0)
         setFollowerCount(followers || 0)
         setFollowingCount(following || 0)
       } catch (error) {
-        console.error('Error fetching profile stats:', error)
+        console.error('Error fetching profile data:', error)
       } finally {
         setIsLoading(false)
       }
     }
 
-    fetchStats()
+    fetchProfileData()
     loadUserPosts()
-    loadSavedPosts()
-  }, [user])
+    if (isOwnProfile) {
+      loadSavedPosts()
+    }
+  }, [userId, user, isOwnProfile])
 
   const handleSaveProfile = async () => {
     if (!user) return
@@ -142,6 +178,42 @@ const ProfilePage: React.FC = () => {
     } catch (error) {
       console.error('Error updating profile:', error)
     }
+  }
+
+  const toggleFollow = async () => {
+    if (!user || !userId) return
+
+    try {
+      if (isFollowing) {
+        // Unfollow
+        const { error } = await supabase
+          .from('follows')
+          .delete()
+          .eq('follower_id', user.id)
+          .eq('following_id', userId)
+
+        if (error) throw error
+        setIsFollowing(false)
+        setFollowerCount(prev => Math.max(0, prev - 1))
+      } else {
+        // Follow
+        const { error } = await supabase
+          .from('follows')
+          .insert([{ follower_id: user.id, following_id: userId }])
+
+        if (error) throw error
+        setIsFollowing(true)
+        setFollowerCount(prev => prev + 1)
+      }
+    } catch (error) {
+      console.error('Error toggling follow:', error)
+    }
+  }
+
+  const handleMessage = () => {
+    if (!userId) return
+    // Navigate to messages with the userId as query param
+    navigate(`/messages?userId=${userId}`)
   }
 
   if (isLoading) {
@@ -214,19 +286,45 @@ const ProfilePage: React.FC = () => {
             </div>
           </div>
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setIsEditing(true)}
-            className="w-full py-3 rounded-lg border border-syndrome-primary text-syndrome-primary font-semibold hover:bg-syndrome-primary/10 transition-colors"
-          >
-            Edit Profile
-          </motion.button>
+          {/* Action Buttons */}
+          {isOwnProfile ? (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setIsEditing(true)}
+              className="w-full py-3 rounded-lg border border-syndrome-primary text-syndrome-primary font-semibold hover:bg-syndrome-primary/10 transition-colors"
+            >
+              Edit Profile
+            </motion.button>
+          ) : (
+            <div className="flex gap-3">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={toggleFollow}
+                className={`flex-1 py-3 rounded-lg font-semibold transition-all ${
+                  isFollowing
+                    ? 'border border-dark-600 text-white hover:bg-dark-700'
+                    : 'bg-gradient-to-r from-syndrome-primary to-syndrome-secondary text-white hover:shadow-glow-lg'
+                }`}
+              >
+                {isFollowing ? 'Following' : 'Follow'}
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleMessage}
+                className="px-6 py-3 rounded-lg border border-syndrome-primary text-syndrome-primary font-semibold hover:bg-syndrome-primary/10 transition-colors"
+              >
+                <MessageCircle className="w-5 h-5" />
+              </motion.button>
+            </div>
+          )}
 
           {/* Tabs */}
           <div className="glass-effect p-4 rounded-2xl border border-dark-700 space-y-4">
             <div className="flex items-center gap-2 p-1 rounded-xl bg-dark-800/60 border border-dark-700">
-              {['posts', 'saved'].map((tab) => (
+              {(isOwnProfile ? ['posts', 'saved'] : ['posts']).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => {

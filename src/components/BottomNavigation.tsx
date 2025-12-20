@@ -1,7 +1,9 @@
-import React, { useState } from 'react'
-import { motion } from 'framer-motion'
-import { Home, Search, Plus, MessageCircle, User } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Home, Search, Plus, Bell, User } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../lib/store'
 
 interface NavigationItem {
   id: string
@@ -13,13 +15,55 @@ interface NavigationItem {
 const BottomNavigation: React.FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const { user } = useAuthStore()
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    if (!user) return
+
+    // Fetch initial unread count
+    const fetchUnreadCount = async () => {
+      const { count, error } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('read', false)
+
+      if (!error && count !== null) {
+        setUnreadCount(count)
+      }
+    }
+
+    fetchUnreadCount()
+
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel('notification_count')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          fetchUnreadCount()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user])
 
   const navigationItems: NavigationItem[] = [
     { id: 'home', label: 'Home', icon: <Home className="w-6 h-6" />, path: '/home' },
     { id: 'search', label: 'Search', icon: <Search className="w-6 h-6" />, path: '/search' },
     { id: 'create', label: 'Create', icon: <Plus className="w-6 h-6" />, path: '/create' },
-    { id: 'messages', label: 'Messages', icon: <MessageCircle className="w-6 h-6" />, path: '/messages' },
+    { id: 'notifications', label: 'Notifications', icon: <Bell className="w-6 h-6" />, path: '/notifications' },
     { id: 'profile', label: 'Profile', icon: <User className="w-6 h-6" />, path: '/profile' },
   ]
 
@@ -89,7 +133,23 @@ const BottomNavigation: React.FC = () => {
                   transition={{ duration: 0.3 }}
                   className="relative z-10 flex flex-col items-center gap-1"
                 >
-                  {item.icon}
+                  <div className="relative">
+                    {item.icon}
+                    {item.id === 'notifications' && unreadCount > 0 && (
+                      <AnimatePresence>
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          exit={{ scale: 0 }}
+                          className="absolute -top-1 -right-1 w-5 h-5 bg-syndrome-accent rounded-full flex items-center justify-center border-2 border-dark-900"
+                        >
+                          <span className="text-[10px] font-bold text-white">
+                            {unreadCount > 9 ? '9+' : unreadCount}
+                          </span>
+                        </motion.div>
+                      </AnimatePresence>
+                    )}
+                  </div>
                   <span className="text-xs font-medium hidden sm:block">{item.label}</span>
                 </motion.div>
 

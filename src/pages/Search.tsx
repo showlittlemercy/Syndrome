@@ -171,7 +171,7 @@ const SearchPage: React.FC = () => {
               >
                 <div
                   className="flex items-center gap-4 flex-1 cursor-pointer"
-                  onClick={() => navigate('/profile')}
+                  onClick={() => navigate(`/profile/${profile.id}`)}
                 >
                   {profile.avatar_url ? (
                     <img

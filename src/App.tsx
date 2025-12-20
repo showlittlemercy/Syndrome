@@ -12,6 +12,8 @@ import CreatePage from './pages/Create'
 import ProfilePage from './pages/Profile'
 import SearchPage from './pages/Search'
 import MessagesPage from './pages/Messages'
+import PostDetailPage from './pages/PostDetail'
+import NotificationsPage from './pages/Notifications'
 import './styles/global.css'
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -114,6 +116,14 @@ const App: React.FC = () => {
             }
           />
           <Route
+            path="/profile/:userId"
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/search"
             element={
               <ProtectedRoute>
@@ -126,6 +136,22 @@ const App: React.FC = () => {
             element={
               <ProtectedRoute>
                 <MessagesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/post/:postId"
+            element={
+              <ProtectedRoute>
+                <PostDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute>
+                <NotificationsPage />
               </ProtectedRoute>
             }
           />
